@@ -537,8 +537,15 @@ def collect_problem_info(block_number, problem_names_all):
 # ============================================================================
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description='Collect problem info from PyCUTEst.')
+    parser.add_argument('--block', type=int, default=None, help='Block number to process (0 to num_blocks-1)')
+    parser.add_argument('--merge', action='store_true', help='Merge all block files into one CSV')
+    args_cmd = parser.parse_args()
+
     # Set up logging
-    log_file = open(os.path.join(saving_path, 'log_pycutest.txt'), 'w')
+    log_name = 'log_pycutest.txt' if args_cmd.block is None else f'log_pycutest_block{args_cmd.block}.txt'
+    log_file = open(os.path.join(saving_path, log_name), 'w')
     sys.stdout = Logger(log_file)
     sys.stderr = Logger(log_file)
 
@@ -549,43 +556,92 @@ if __name__ == "__main__":
 
     print(f"Total problems to process: {len(problem_names_all)}")
 
-    # Check which blocks are already finished
-    files = os.listdir(saving_path)
-    blocks_finished = []
-    for f in files:
-        if "probinfo_pycutest_block" in f and f.endswith(".csv"):
-            match = re.findall(r"block(\d+)", f)
-            if match:
-                blocks_finished.append(int(match[0]))
-    blocks_finished.sort()
+    if args_cmd.merge:
+        # Merge all block CSV files
+        print("\n=== Merging all block files ===")
+        dfs = []
+        for i in range(num_blocks):
+            block_file = os.path.join(saving_path, f'probinfo_pycutest_block{i}.csv')
+            if os.path.exists(block_file):
+                print(f"Adding {block_file}")
+                dfs.append(pd.read_csv(block_file))
+            else:
+                print(f"Warning: {block_file} not found")
 
-    # Process each block
-    for block_num in range(num_blocks):
-        if block_num in blocks_finished:
-            print(f"\n=== Skipping block {block_num + 1} of {num_blocks} (already finished) ===\n")
-            continue
+        if dfs:
+            merged_df = pd.concat(dfs, ignore_index=True)
+            # Remove duplicates just in case
+            merged_df = merged_df.drop_duplicates(subset=['problem_name'])
+            merged_df.sort_values(by='problem_name', inplace=True)
+            merged_df.to_csv(os.path.join(saving_path, 'probinfo_pycutest.csv'), index=False)
+            print(f"Merged {len(dfs)} block files into probinfo_pycutest.csv")
 
-        print(f"\n=== Processing block {block_num + 1} of {num_blocks} ===")
-
-        # Clear all cache before each block to prevent memory buildup
+            # Merge feasibility and timeout files
+            all_feasibility = []
+            all_timeout = []
+            for i in range(num_blocks):
+                feas_file = os.path.join(saving_path, f'feasibility_pycutest_block{i}.txt')
+                if os.path.exists(feas_file):
+                    with open(feas_file, 'r') as f:
+                        all_feasibility.extend(f.read().split())
+                
+                tout_file = os.path.join(saving_path, f'timeout_problems_pycutest_block{i}.txt')
+                if os.path.exists(tout_file):
+                    with open(tout_file, 'r') as f:
+                        all_timeout.extend(f.read().split())
+            
+            with open(os.path.join(saving_path, 'feasibility_pycutest.txt'), 'w') as f:
+                f.write(' '.join(sorted(list(set(all_feasibility)))))
+            
+            with open(os.path.join(saving_path, 'timeout_problems_pycutest.txt'), 'w') as f:
+                f.write(' '.join(sorted(list(set(all_timeout)))))
+            
+            print("Merged feasibility and timeout info.")
+        
+    elif args_cmd.block is not None:
+        block_num = args_cmd.block
+        print(f"\n=== Processing block {block_num + 1} of {num_blocks} (Matrix Mode) ===")
         pycutest_clear_all_cache()
-
         collect_problem_info(block_num, problem_names_all)
+    else:
+        # Original sequential processing
+        # Check which blocks are already finished
+        files = os.listdir(saving_path)
+        blocks_finished = []
+        for f in files:
+            if "probinfo_pycutest_block" in f and f.endswith(".csv"):
+                match = re.findall(r"block(\d+)", f)
+                if match:
+                    blocks_finished.append(int(match[0]))
+        blocks_finished.sort()
 
-        print(f"=== Finished block {block_num + 1} of {num_blocks} ===\n")
+        # Process each block
+        for block_num in range(num_blocks):
+            if block_num in blocks_finished:
+                print(f"\n=== Skipping block {block_num + 1} of {num_blocks} (already finished) ===\n")
+                continue
 
-    # Merge all block CSV files
-    print("\n=== Merging all block files ===")
-    dfs = []
-    for i in range(num_blocks):
-        block_file = os.path.join(saving_path, f'probinfo_pycutest_block{i}.csv')
-        if os.path.exists(block_file):
-            dfs.append(pd.read_csv(block_file))
+            print(f"\n=== Processing block {block_num + 1} of {num_blocks} ===")
 
-    if dfs:
-        merged_df = pd.concat(dfs, ignore_index=True)
-        merged_df.to_csv(os.path.join(saving_path, 'probinfo_pycutest.csv'), index=False)
-        print(f"Merged {len(dfs)} block files into probinfo_pycutest.csv")
+            # Clear all cache before each block to prevent memory buildup
+            pycutest_clear_all_cache()
+
+            collect_problem_info(block_num, problem_names_all)
+
+            print(f"=== Finished block {block_num + 1} of {num_blocks} ===\n")
+
+        # Automatically merge if running all blocks
+        print("\n=== Merging all block files ===")
+        dfs = []
+        for i in range(num_blocks):
+            block_file = os.path.join(saving_path, f'probinfo_pycutest_block{i}.csv')
+            if os.path.exists(block_file):
+                dfs.append(pd.read_csv(block_file))
+
+        if dfs:
+            merged_df = pd.concat(dfs, ignore_index=True)
+            merged_df.to_csv(os.path.join(saving_path, 'probinfo_pycutest.csv'), index=False)
+            print(f"Merged {len(dfs)} block files into probinfo_pycutest.csv")
 
     print("\nScript completed successfully.")
 

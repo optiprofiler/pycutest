@@ -1,27 +1,33 @@
-# Workflow to collect problem information from PyCUTEst problems
+# Workflow to collect problem information from PyCUTEst problems using parallel blocks
 # This workflow installs CUTEst/PyCUTEst and runs the problem info collection script
-# Due to memory issues with PyCUTEst, the script uses block-based processing
+# Parallelizing helps avoid memory issues and speeds up the process.
 
 name: Collect Problem Info
 
 on:
-  workflow_dispatch:  # Manual trigger
+  push:
+    branches:
+      - main
   schedule:
-    - cron: '0 6 1 * *'  # Monthly on the 1st at 6:00 UTC (after sync at 5:00)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  collect-info:
+  collect-blocks:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours - needed due to large number of problems
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Split into 20 blocks
+        block: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,7 +53,7 @@ jobs:
           echo "MYARCH=pc64.lnx.gfo" >> $GITHUB_ENV
           echo "$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin" >> $GITHUB_PATH
 
-      - name: Checkout OptiProfiler (contains required class definitions)
+      - name: Checkout OptiProfiler
         uses: actions/checkout@v4
         with:
           repository: optiprofiler/optiprofiler
@@ -62,7 +68,7 @@ jobs:
           pip install -e optiprofiler
           pip install pycutest
 
-      - name: Run problem info collection
+      - name: Run block collection
         run: |
           export ARCHDEFS=$HOME/cutest/archdefs
           export SIFDECODE=$HOME/cutest/sifdecode
@@ -70,21 +76,47 @@ jobs:
           export MASTSIF=$HOME/cutest/mastsif/sif
           export MYARCH=pc64.lnx.gfo
           export PATH=$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin:$PATH
-          cd $GITHUB_WORKSPACE
-          python .github/actions/collect_info/p_getInfo.py
+          python .github/actions/collect_info/p_getInfo.py --block ${{ matrix.block }}
 
-      - name: Commit and push results
+      - name: Upload block results
+        uses: actions/upload-artifact@v4
+        with:
+          name: probinfo_block_${{ matrix.block }}
+          path: probinfo_pycutest_block${{ matrix.block }}.csv
+          retention-days: 1
+
+  merge-results:
+    needs: collect-blocks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move artifacts to root
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Add all result files
-          git add -A probinfo_pycutest*.csv feasibility_pycutest.txt timeout_problems_pycutest.txt log_pycutest.txt 2>/dev/null || true
-          
-          # Check if there are changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Update PyCUTEst problem info [automated]"
-            git push
-          fi
+          find artifacts -name "*.csv" -exec cp {} . \;
+
+      - name: Install pandas
+        run: pip install pandas
+
+      - name: Run merge script
+        run: python .github/actions/collect_info/p_getInfo.py --merge
+
+      - name: Upload final Python results
+        uses: actions/upload-artifact@v4
+        with:
+          name: probinfo-files-pycutest
+          path: |
+            probinfo_pycutest.csv
+            feasibility_pycutest.txt
+            timeout_problems_pycutest.txt
