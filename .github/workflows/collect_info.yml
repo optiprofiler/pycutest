@@ -1,0 +1,90 @@
+# Workflow to collect problem information from PyCUTEst problems
+# This workflow installs CUTEst/PyCUTEst and runs the problem info collection script
+# Due to memory issues with PyCUTEst, the script uses block-based processing
+
+name: Collect Problem Info
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '0 6 1 * *'  # Monthly on the 1st at 6:00 UTC (after sync at 5:00)
+
+permissions:
+  contents: write
+
+jobs:
+  collect-info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours - needed due to large number of problems
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran make wget
+
+      - name: Install CUTEst
+        run: |
+          chmod +x .github/actions/collect_info/setup.sh
+          ./.github/actions/collect_info/setup.sh
+
+      - name: Set CUTEst environment variables
+        run: |
+          echo "ARCHDEFS=$HOME/cutest/archdefs" >> $GITHUB_ENV
+          echo "SIFDECODE=$HOME/cutest/sifdecode" >> $GITHUB_ENV
+          echo "CUTEST=$HOME/cutest/cutest" >> $GITHUB_ENV
+          echo "MASTSIF=$HOME/cutest/mastsif/sif" >> $GITHUB_ENV
+          echo "MYARCH=pc64.lnx.gfo" >> $GITHUB_ENV
+          echo "$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin" >> $GITHUB_PATH
+
+      - name: Checkout OptiProfiler (contains required class definitions)
+        uses: actions/checkout@v4
+        with:
+          repository: optiprofiler/optiprofiler
+          path: optiprofiler
+          submodules: recursive
+          ref: python
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r .github/actions/collect_info/requirements.txt
+          pip install -e optiprofiler
+          pip install pycutest
+
+      - name: Run problem info collection
+        run: |
+          export ARCHDEFS=$HOME/cutest/archdefs
+          export SIFDECODE=$HOME/cutest/sifdecode
+          export CUTEST=$HOME/cutest/cutest
+          export MASTSIF=$HOME/cutest/mastsif/sif
+          export MYARCH=pc64.lnx.gfo
+          export PATH=$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin:$PATH
+          cd $GITHUB_WORKSPACE
+          python .github/actions/collect_info/p_getInfo.py
+
+      - name: Commit and push results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add all result files
+          git add -A probinfo_pycutest*.csv feasibility_pycutest.txt timeout_problems_pycutest.txt log_pycutest.txt 2>/dev/null || true
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update PyCUTEst problem info [automated]"
+            git push
+          fi
