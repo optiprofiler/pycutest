@@ -626,9 +626,8 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
             import traceback
             traceback.print_exc()
     
-    # Register cleanup function and return it for signal handler
+    # Register cleanup function
     atexit.register(cleanup_on_exit)
-    return cleanup_on_exit
 
     # 1. Crash Detection: If current_problem file exists, the previous run crashed
     if os.path.exists(current_prob_file):
@@ -947,33 +946,14 @@ if __name__ == "__main__":
     if args_cmd.block is not None:
         os.environ['BLOCK_NUM'] = str(args_cmd.block)
     
-    # Register signal handlers for graceful shutdown (only in main process)
+    # Ignore SIGTERM in the main process so that only subprocesses are killed.
+    # When a subprocess is killed (by SIGTERM, timeout, etc.), it returns non-zero,
+    # and the main process will exclude the problem and continue with the next one.
+    # This is the same approach as s2mpj_python.
     if not args_cmd.single:
-        def signal_handler(signum, frame):
-            print(f"\nReceived signal {signum}. Saving progress and exiting...")
-            sys.stdout.flush()
-            sys.stderr.flush()
-            
-            # Call cleanup function directly if available
-            cleanup_func = globals().get('cleanup_func')
-            if cleanup_func:
-                try:
-                    cleanup_func()
-                except Exception as e:
-                    print(f"Error in signal handler cleanup: {e}")
-            
-            # Also trigger atexit handlers
-            try:
-                atexit._run_exitfuncs()
-            except:
-                pass
-            
-            sys.stdout.flush()
-            sys.stderr.flush()
-            sys.exit(0)
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        # For SIGINT (Ctrl+C), we still want to be able to interrupt for debugging
+        # signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     # Get all problem names (excluding blacklisted ones)
     problem_names_all = pycutest_select({})
@@ -1028,10 +1008,7 @@ if __name__ == "__main__":
         block_num = args_cmd.block
         print(f"\n=== Processing block {block_num + 1} of {num_blocks} (Matrix Mode) ===")
         pycutest_clear_all_cache()
-        cleanup_func = collect_problem_info(block_num, problem_names_all, use_subprocess=True)
-        # Store cleanup function for signal handler
-        if 'cleanup_func' in locals():
-            globals()['cleanup_func'] = cleanup_func
+        collect_problem_info(block_num, problem_names_all, use_subprocess=True)
     else:
         # Original sequential processing
         # Check which blocks are already finished
@@ -1056,10 +1033,7 @@ if __name__ == "__main__":
             pycutest_clear_all_cache()
             os.environ['BLOCK_NUM'] = str(block_num)
 
-            cleanup_func = collect_problem_info(block_num, problem_names_all, use_subprocess=True)
-            # Store cleanup function for signal handler
-            if 'cleanup_func' in locals():
-                globals()['cleanup_func'] = cleanup_func
+            collect_problem_info(block_num, problem_names_all, use_subprocess=True)
 
             print(f"=== Finished block {block_num + 1} of {num_blocks} ===\n")
 
