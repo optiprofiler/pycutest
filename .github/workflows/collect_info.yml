@@ -59,7 +59,7 @@ jobs:
           repository: optiprofiler/optiprofiler
           path: optiprofiler
           submodules: recursive
-          ref: python
+          ref: reorganize
 
       - name: Install Python dependencies
         run: |
@@ -110,7 +110,7 @@ jobs:
         run: pip install pandas
 
       - name: Run merge script
-        run: python .github/actions/collect_info/p_getInfo.py --merge
+        run: python .github/actions/collect_info/merge_csv.py
 
       - name: Upload final Python results
         uses: actions/upload-artifact@v4
