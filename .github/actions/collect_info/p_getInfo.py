@@ -585,11 +585,15 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
     def cleanup_on_exit():
         """Cleanup function to save progress on exit"""
         try:
+            print("Running cleanup function...")
+            sys.stdout.flush()
+            
             if os.path.exists(current_prob_file):
                 try:
                     os.remove(current_prob_file)
                 except:
                     pass
+            
             # Finalize temp files
             if os.path.exists(block_csv_temp):
                 try:
@@ -607,13 +611,24 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                             print(f"Merged progress into {block_csv}")
                         except Exception as e:
                             print(f"Error merging in cleanup: {e}")
+                            # Fallback: keep temp file
+                            print(f"Keeping temp file at {block_csv_temp} for manual recovery")
                 except Exception as e:
                     print(f"Error in cleanup: {e}")
-        except Exception:
-            pass
+                    # Fallback: keep temp file
+                    print(f"Keeping temp file at {block_csv_temp} for manual recovery")
+            
+            sys.stdout.flush()
+            sys.stderr.flush()
+            print("Cleanup completed.")
+        except Exception as e:
+            print(f"Error in cleanup_on_exit: {e}")
+            import traceback
+            traceback.print_exc()
     
-    # Register cleanup function
+    # Register cleanup function and return it for signal handler
     atexit.register(cleanup_on_exit)
+    return cleanup_on_exit
 
     # 1. Crash Detection: If current_problem file exists, the previous run crashed
     if os.path.exists(current_prob_file):
@@ -936,7 +951,25 @@ if __name__ == "__main__":
     if not args_cmd.single:
         def signal_handler(signum, frame):
             print(f"\nReceived signal {signum}. Saving progress and exiting...")
-            # Cleanup will be handled by atexit
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
+            # Call cleanup function directly if available
+            cleanup_func = globals().get('cleanup_func')
+            if cleanup_func:
+                try:
+                    cleanup_func()
+                except Exception as e:
+                    print(f"Error in signal handler cleanup: {e}")
+            
+            # Also trigger atexit handlers
+            try:
+                atexit._run_exitfuncs()
+            except:
+                pass
+            
+            sys.stdout.flush()
+            sys.stderr.flush()
             sys.exit(0)
         
         signal.signal(signal.SIGINT, signal_handler)
@@ -995,7 +1028,10 @@ if __name__ == "__main__":
         block_num = args_cmd.block
         print(f"\n=== Processing block {block_num + 1} of {num_blocks} (Matrix Mode) ===")
         pycutest_clear_all_cache()
-        collect_problem_info(block_num, problem_names_all, use_subprocess=True)
+        cleanup_func = collect_problem_info(block_num, problem_names_all, use_subprocess=True)
+        # Store cleanup function for signal handler
+        if 'cleanup_func' in locals():
+            globals()['cleanup_func'] = cleanup_func
     else:
         # Original sequential processing
         # Check which blocks are already finished
@@ -1020,7 +1056,10 @@ if __name__ == "__main__":
             pycutest_clear_all_cache()
             os.environ['BLOCK_NUM'] = str(block_num)
 
-            collect_problem_info(block_num, problem_names_all, use_subprocess=True)
+            cleanup_func = collect_problem_info(block_num, problem_names_all, use_subprocess=True)
+            # Store cleanup function for signal handler
+            if 'cleanup_func' in locals():
+                globals()['cleanup_func'] = cleanup_func
 
             print(f"=== Finished block {block_num + 1} of {num_blocks} ===\n")
 
