@@ -664,111 +664,111 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
             except Exception as e:
                 print(f"Warning: Could not write current problem file: {e}")
 
-        if use_subprocess:
-            # Run in subprocess for isolation - crashes only kill the child
-            cmd = None
-            try:
-                # Get parameters with error handling
+            if use_subprocess:
+                # Run in subprocess for isolation - crashes only kill the child
+                cmd = None
                 try:
-                    para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                    # Get parameters with error handling
+                    try:
+                        para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                    except Exception as e:
+                        print(f"Error getting SIF params for {name}: {e}. Using defaults.")
+                        para_names, para_values, para_defaults = None, None, None
+                    
+                    # Serialize parameters for subprocess
+                    params_json = json.dumps({
+                        'para_names': para_names,
+                        'para_values': para_values,
+                        'para_defaults': para_defaults
+                    })
+                    cmd = [sys.executable, os.path.abspath(__file__), "--single", name, "--params", params_json]
+                    # Pass block number via environment
+                    env = os.environ.copy()
+                    env['BLOCK_NUM'] = str(block_number)
+                    # Also pass CUTEst environment variables to subprocess
+                    for key in ['ARCHDEFS', 'SIFDECODE', 'CUTEST', 'MASTSIF', 'MYARCH', 'PATH']:
+                        if key in os.environ:
+                            env[key] = os.environ[key]
+                    
+                    ret = subprocess.run(cmd, cwd=repo_root, timeout=None, env=env, 
+                                        capture_output=False, stderr=subprocess.STDOUT)
+                except subprocess.TimeoutExpired:
+                    print(f"Subprocess timeout for {name}")
+                    ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
+                except KeyboardInterrupt:
+                    # Handle cancellation gracefully
+                    print(f"\nInterrupted while processing {name}. Saving progress...")
+                    if os.path.exists(current_prob_file):
+                        try:
+                            os.remove(current_prob_file)
+                        except:
+                            pass
+                    raise  # Re-raise to allow cleanup
                 except Exception as e:
-                    print(f"Error getting SIF params for {name}: {e}. Using defaults.")
-                    para_names, para_values, para_defaults = None, None, None
-                
-                # Serialize parameters for subprocess
-                params_json = json.dumps({
-                    'para_names': para_names,
-                    'para_values': para_values,
-                    'para_defaults': para_defaults
-                })
-                cmd = [sys.executable, os.path.abspath(__file__), "--single", name, "--params", params_json]
-                # Pass block number via environment
-                env = os.environ.copy()
-                env['BLOCK_NUM'] = str(block_number)
-                # Also pass CUTEst environment variables to subprocess
-                for key in ['ARCHDEFS', 'SIFDECODE', 'CUTEST', 'MASTSIF', 'MYARCH', 'PATH']:
-                    if key in os.environ:
-                        env[key] = os.environ[key]
-                
-                ret = subprocess.run(cmd, cwd=repo_root, timeout=None, env=env, 
-                                    capture_output=False, stderr=subprocess.STDOUT)
-            except subprocess.TimeoutExpired:
-                print(f"Subprocess timeout for {name}")
-                ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
-            except KeyboardInterrupt:
-                # Handle cancellation gracefully
-                print(f"\nInterrupted while processing {name}. Saving progress...")
-                if os.path.exists(current_prob_file):
-                    try:
-                        os.remove(current_prob_file)
-                    except:
-                        pass
-                raise  # Re-raise to allow cleanup
-            except Exception as e:
-                print(f"Error running subprocess for {name}: {e}")
-                import traceback
-                traceback.print_exc()
-                ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
+                    print(f"Error running subprocess for {name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
 
-            if ret.returncode != 0:
-                print(f"Problem {name} crashed or failed (exit {ret.returncode}). Excluding and continuing.")
-                append_to_txt(exclude_file, name)
-                if os.path.exists(current_prob_file):
-                    try:
-                        os.remove(current_prob_file)
-                    except:
-                        pass
+                if ret.returncode != 0:
+                    print(f"Problem {name} crashed or failed (exit {ret.returncode}). Excluding and continuing.")
+                    append_to_txt(exclude_file, name)
+                    if os.path.exists(current_prob_file):
+                        try:
+                            os.remove(current_prob_file)
+                        except:
+                            pass
+                    if os.path.exists(result_single_path):
+                        try:
+                            os.remove(result_single_path)
+                        except:
+                            pass
+                    continue
+
+                # Load result from JSON
                 if os.path.exists(result_single_path):
                     try:
+                        with open(result_single_path, 'r') as f:
+                            info = json.load(f)
                         os.remove(result_single_path)
-                    except:
-                        pass
-                continue
-
-            # Load result from JSON
-            if os.path.exists(result_single_path):
-                try:
-                    with open(result_single_path, 'r') as f:
-                        info = json.load(f)
-                    os.remove(result_single_path)
-                except Exception as e:
-                    print(f"Error loading result for {name}: {e}")
+                    except Exception as e:
+                        print(f"Error loading result for {name}: {e}")
+                        append_to_txt(exclude_file, name)
+                        continue
+                else:
+                    print(f"No result file found for {name}. Excluding.")
                     append_to_txt(exclude_file, name)
                     continue
             else:
-                print(f"No result file found for {name}. Excluding.")
-                append_to_txt(exclude_file, name)
-                continue
-        else:
-            # Direct processing (original method) - not recommended, use subprocess instead
-            try:
+                # Direct processing (original method) - not recommended, use subprocess instead
                 try:
-                    para_names, para_values, para_defaults = pycutest_get_sif_params(name)
-                except Exception as e:
-                    print(f"Error getting SIF params for {name}: {e}. Using defaults.")
-                    para_names, para_values, para_defaults = None, None, None
-                info = get_problem_info(name, para_names, para_values, para_defaults, block_number=block_number)
-            except KeyboardInterrupt:
-                print(f"\nInterrupted while processing {name}. Saving progress...")
-                if os.path.exists(current_prob_file):
                     try:
-                        os.remove(current_prob_file)
-                    except:
-                        pass
-                raise  # Re-raise to allow cleanup
-            except Exception as e:
-                print(f"Error processing {name}: {e}")
-                import traceback
-                traceback.print_exc()
-                append_to_txt(exclude_file, name)
-                continue
+                        para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                    except Exception as e:
+                        print(f"Error getting SIF params for {name}: {e}. Using defaults.")
+                        para_names, para_values, para_defaults = None, None, None
+                    info = get_problem_info(name, para_names, para_values, para_defaults, block_number=block_number)
+                except KeyboardInterrupt:
+                    print(f"\nInterrupted while processing {name}. Saving progress...")
+                    if os.path.exists(current_prob_file):
+                        try:
+                            os.remove(current_prob_file)
+                        except:
+                            pass
+                    raise  # Re-raise to allow cleanup
+                except Exception as e:
+                    print(f"Error processing {name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    append_to_txt(exclude_file, name)
+                    continue
 
-        # Save result incrementally
-        def has_unknown_values(info_dict):
-            for value in info_dict.values():
-                if str(value).strip().lower() == 'unknown':
-                    return True
-            return False
+            # Save result incrementally
+            def has_unknown_values(info_dict):
+                for value in info_dict.values():
+                    if str(value).strip().lower() == 'unknown':
+                        return True
+                return False
 
         try:
             if not has_unknown_values(info):
