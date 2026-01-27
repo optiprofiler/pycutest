@@ -25,6 +25,8 @@ from concurrent.futures import TimeoutError
 import threading
 import gc
 import shutil
+import json
+import subprocess
 
 # Get the repository root directory (three levels up from this script)
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -127,6 +129,36 @@ known_feasibility = [
 feasibility = []
 timeout_problems = []
 
+# Helper function to append to txt files safely
+def append_to_txt(file_path, value):
+    """Append a value to a text file, avoiding duplicates."""
+    try:
+        existing = set()
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                existing = {line.strip() for line in f.readlines()}
+        if value in existing:
+            return
+        with open(file_path, 'a') as f:
+            f.write(value + '\n')
+    except Exception as e:
+        print(f"Error appending to {file_path}: {e}")
+
+# Helper function to convert numpy types to JSON-serializable types
+def _to_json_serializable(obj):
+    """Convert numpy types in info_single to native Python for JSON."""
+    if isinstance(obj, dict):
+        return {k: _to_json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (list, tuple)):
+        return [_to_json_serializable(item) for item in obj]
+    return obj
+
 
 # ============================================================================
 # Logging
@@ -137,17 +169,25 @@ class Logger:
     def __init__(self, logfile):
         self.terminal = sys.__stdout__
         self.log = logfile
+        self._closed = False
 
     def write(self, message):
         self.terminal.write(message)
-        try:
-            self.log.write(message)
-        except Exception as e:
-            self.terminal.write(f"[Logger Error] {e}\n")
+        if not self._closed:
+            try:
+                self.log.write(message)
+            except (ValueError, OSError) as e:
+                # File is closed or error writing - just write to terminal
+                self.terminal.write(f"[Logger Error] {e}\n")
+                self._closed = True
 
     def flush(self):
         self.terminal.flush()
-        self.log.flush()
+        if not self._closed:
+            try:
+                self.log.flush()
+            except (ValueError, OSError):
+                self._closed = True
 
 
 # ============================================================================
@@ -259,7 +299,7 @@ def should_skip_parameter_combination(problem_name, comb):
 # Problem information extraction
 # ============================================================================
 
-def get_problem_info(problem_name, para_names=None, para_values=None, para_defaults=None):
+def get_problem_info(problem_name, para_names=None, para_values=None, para_defaults=None, block_number=None):
     """
     Extract information about a single problem.
     
@@ -320,6 +360,9 @@ def get_problem_info(problem_name, para_names=None, para_values=None, para_defau
     except TimeoutError:
         print(f"Timeout while loading problem {problem_name}.")
         timeout_problems.append(problem_name)
+        block_str = str(block_number) if block_number is not None else os.environ.get("BLOCK_NUM", "")
+        timeout_file = os.path.join(saving_path, f'timeout_problems_pycutest_block{block_str}_temp.txt')
+        append_to_txt(timeout_file, problem_name)
         return info_single
     except Exception as e:
         print(f"Error loading problem {problem_name}: {e}")
@@ -355,6 +398,9 @@ def get_problem_info(problem_name, para_names=None, para_values=None, para_defau
             info_single['isfeasibility'] = 1
             info_single['f0'] = 0
             feasibility.append(problem_name)
+            block_str = str(block_number) if block_number is not None else os.environ.get("BLOCK_NUM", "")
+            feas_file = os.path.join(saving_path, f'feasibility_pycutest_block{block_str}_temp.txt')
+            append_to_txt(feas_file, problem_name)
         else:
             info_single['isfeasibility'] = 0
             info_single['f0'] = f
@@ -363,6 +409,9 @@ def get_problem_info(problem_name, para_names=None, para_values=None, para_defau
         info_single['f0'] = 0
         info_single['isfeasibility'] = 1
         feasibility.append(problem_name)
+        block_str = str(block_number) if block_number is not None else os.environ.get("BLOCK_NUM", "")
+        feas_file = os.path.join(saving_path, f'feasibility_pycutest_block{block_str}_temp.txt')
+        append_to_txt(feas_file, problem_name)
 
     # Clean up default problem
     try:
@@ -425,6 +474,9 @@ def get_problem_info(problem_name, para_names=None, para_values=None, para_defau
         except TimeoutError:
             print(f"Timeout for {problem_name} with params {comb}")
             timeout_problems.append(f"{problem_name} with params {comb}")
+            block_str = str(block_number) if block_number is not None else os.environ.get("BLOCK_NUM", "")
+            timeout_file = os.path.join(saving_path, f'timeout_problems_pycutest_block{block_str}_temp.txt')
+            append_to_txt(timeout_file, f"{problem_name} with params {comb}")
         except Exception as e:
             print(f"Error processing {problem_name} with params {comb}: {e}")
         finally:
@@ -502,11 +554,12 @@ def process_parametric_problem(problem_name, para_names, comb):
 # Block-based processing
 # ============================================================================
 
-def collect_problem_info(block_number, problem_names_all):
+def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
     """
     Collect problem info for a specific block of problems.
     
     This divides the total problem set into blocks to manage memory.
+    If use_subprocess is True, each problem runs in a separate subprocess for isolation.
     """
     total_problems = len(problem_names_all)
     block_size = (total_problems + num_blocks - 1) // num_blocks
@@ -517,44 +570,184 @@ def collect_problem_info(block_number, problem_names_all):
     print(f"Block {block_number}: Processing problems {start_idx} to {end_idx - 1}")
     print(f"Problems: {problem_names}")
 
-    results = []
+    # File paths for this block
+    block_csv = os.path.join(saving_path, f'probinfo_pycutest_block{block_number}.csv')
+    block_csv_temp = os.path.join(saving_path, f'probinfo_pycutest_block{block_number}_temp.csv')
+    current_prob_file = os.path.join(saving_path, f'current_problem_block{block_number}.txt')
+    exclude_file = os.path.join(saving_path, f'exclude_block{block_number}.txt')
+    result_single_path = os.path.join(saving_path, f'result_single_block{block_number}.json')
+    feas_file = os.path.join(saving_path, f'feasibility_pycutest_block{block_number}_temp.txt')
+    timeout_file = os.path.join(saving_path, f'timeout_problems_pycutest_block{block_number}_temp.txt')
+
+    # 1. Crash Detection: If current_problem file exists, the previous run crashed
+    if os.path.exists(current_prob_file):
+        try:
+            with open(current_prob_file, 'r') as f:
+                crashed_prob = f.read().strip()
+            if crashed_prob:
+                print(f"Detected crash during previous run on problem: {crashed_prob}. Adding to exclude list.")
+                append_to_txt(exclude_file, crashed_prob)
+            os.remove(current_prob_file)
+        except Exception as e:
+            print(f"Error handling crash detection: {e}")
+
+    # 2. Load existing exclusions
+    excluded_problems = set()
+    if os.path.exists(exclude_file):
+        try:
+            with open(exclude_file, 'r') as f:
+                excluded_problems = {line.strip() for line in f if line.strip()}
+        except Exception as e:
+            print(f"Error reading exclude file: {e}")
+
+    # 3. Resume: Find which problems are already completed
+    completed_problems = set()
+    if os.path.exists(block_csv_temp):
+        try:
+            existing_df = pd.read_csv(block_csv_temp, usecols=['problem_name'])
+            completed_problems = set(existing_df['problem_name'].tolist())
+            print(f"Found {len(completed_problems)} already completed problems in temp file. Resuming...")
+        except Exception as e:
+            print(f"Could not read existing temp CSV for resumption: {e}")
+
+    # Filter out excluded and completed problems
+    problem_names = [name for name in problem_names 
+                     if name not in excluded_problems and name not in completed_problems]
+
+    # 4. Process each problem
     for name in problem_names:
         print(f"\n>>> STARTING: {name}")
         sys.stdout.flush()
+        sys.stderr.flush()
 
-        para_names, para_values, para_defaults = pycutest_get_sif_params(name)
-        info = get_problem_info(name, para_names, para_values, para_defaults)
-        results.append(info)
+        # Write current problem name before processing to detect crashes
+        try:
+            with open(current_prob_file, 'w') as f:
+                f.write(name)
+        except Exception as e:
+            print(f"Warning: Could not write current problem file: {e}")
+
+        if use_subprocess:
+            # Run in subprocess for isolation - crashes only kill the child
+            try:
+                para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                # Serialize parameters for subprocess
+                params_json = json.dumps({
+                    'para_names': para_names,
+                    'para_values': para_values,
+                    'para_defaults': para_defaults
+                })
+                cmd = [sys.executable, os.path.abspath(__file__), "--single", name, "--params", params_json]
+                # Pass block number via environment
+                env = os.environ.copy()
+                env['BLOCK_NUM'] = str(block_number)
+                ret = subprocess.run(cmd, cwd=repo_root, timeout=None, env=env)
+            except subprocess.TimeoutExpired:
+                ret = subprocess.CompletedProcess(cmd, returncode=-1)
+            except Exception as e:
+                print(f"Error running subprocess for {name}: {e}")
+                ret = subprocess.CompletedProcess(cmd, returncode=-1)
+
+            if ret.returncode != 0:
+                print(f"Problem {name} crashed or failed (exit {ret.returncode}). Excluding and continuing.")
+                append_to_txt(exclude_file, name)
+                if os.path.exists(current_prob_file):
+                    try:
+                        os.remove(current_prob_file)
+                    except:
+                        pass
+                if os.path.exists(result_single_path):
+                    try:
+                        os.remove(result_single_path)
+                    except:
+                        pass
+                continue
+
+            # Load result from JSON
+            if os.path.exists(result_single_path):
+                try:
+                    with open(result_single_path, 'r') as f:
+                        info = json.load(f)
+                    os.remove(result_single_path)
+                except Exception as e:
+                    print(f"Error loading result for {name}: {e}")
+                    append_to_txt(exclude_file, name)
+                    continue
+            else:
+                print(f"No result file found for {name}. Excluding.")
+                append_to_txt(exclude_file, name)
+                continue
+        else:
+            # Direct processing (original method)
+            try:
+                para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                info = get_problem_info(name, para_names, para_values, para_defaults, block_number=block_number)
+            except Exception as e:
+                print(f"Error processing {name}: {e}")
+                append_to_txt(exclude_file, name)
+                continue
+
+        # Save result incrementally
+        def has_unknown_values(info_dict):
+            for value in info_dict.values():
+                if str(value).strip().lower() == 'unknown':
+                    return True
+            return False
+
+        if not has_unknown_values(info):
+            try:
+                df_single = pd.DataFrame([info])
+                if not os.path.exists(block_csv_temp):
+                    df_single.to_csv(block_csv_temp, index=False, na_rep='nan')
+                else:
+                    df_single.to_csv(block_csv_temp, mode='a', header=False, index=False, na_rep='nan')
+            except Exception as e:
+                print(f"Error saving result for {name}: {e}")
+        else:
+            print(f"Filtered out problem {name} due to 'unknown' values.")
+
+        # Remove current problem file after successful processing
+        if os.path.exists(current_prob_file):
+            try:
+                os.remove(current_prob_file)
+            except:
+                pass
 
         sys.stdout.flush()
         sys.stderr.flush()
 
-    # Save block results
-    df = pd.DataFrame(results)
+    # 5. Finalize: Move temp file to final location
+    if os.path.exists(block_csv_temp):
+        try:
+            shutil.move(block_csv_temp, block_csv)
+        except Exception as e:
+            print(f"Error moving temp file to final: {e}")
+            # Fallback: copy instead of move
+            try:
+                shutil.copy(block_csv_temp, block_csv)
+            except:
+                pass
 
-    def has_unknown_values(row):
-        for value in row:
-            if str(value).strip().lower() == 'unknown':
-                return True
-        return False
+    # Save auxiliary files (feasibility and timeout)
+    try:
+        if os.path.exists(feas_file):
+            with open(feas_file, 'r') as f:
+                feas_list = [line.strip() for line in f if line.strip()]
+            if feas_list:
+                with open(os.path.join(saving_path, f'feasibility_pycutest_block{block_number}.txt'), 'w') as f:
+                    f.write(' '.join(sorted(list(set(feas_list)))))
+    except Exception as e:
+        print(f"Error saving feasibility file: {e}")
 
-    unknown_mask = df.apply(has_unknown_values, axis=1)
-    if unknown_mask.any():
-        filtered_problems = df.loc[unknown_mask, 'problem_name'].tolist()
-        print(f"Filtered out {len(filtered_problems)} problems with 'unknown' values:")
-        for problem in filtered_problems:
-            print(f"  - {problem}")
-
-    df_clean = df[~unknown_mask]
-    df_clean.to_csv(os.path.join(saving_path, f'probinfo_pycutest_block{block_number}.csv'),
-                    index=False, na_rep='nan')
-
-    # Save auxiliary files
-    with open(os.path.join(saving_path, 'feasibility_pycutest.txt'), 'w') as f:
-        f.write(' '.join(feasibility))
-
-    with open(os.path.join(saving_path, 'timeout_problems_pycutest.txt'), 'w') as f:
-        f.write(' '.join(timeout_problems))
+    try:
+        if os.path.exists(timeout_file):
+            with open(timeout_file, 'r') as f:
+                timeout_list = [line.strip() for line in f if line.strip()]
+            if timeout_list:
+                with open(os.path.join(saving_path, f'timeout_problems_pycutest_block{block_number}.txt'), 'w') as f:
+                    f.write(' '.join(sorted(list(set(timeout_list)))))
+    except Exception as e:
+        print(f"Error saving timeout file: {e}")
 
     print(f"Block {block_number} completed successfully.")
 
@@ -568,13 +761,44 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Collect problem info from PyCUTEst.')
     parser.add_argument('--block', type=int, default=None, help='Block number to process (0 to num_blocks-1)')
     parser.add_argument('--merge', action='store_true', help='Merge all block files into one CSV')
+    parser.add_argument('--single', type=str, default=None, help='Process a single problem (internal use)')
+    parser.add_argument('--params', type=str, default=None, help='JSON string of parameters (internal use)')
     args_cmd = parser.parse_args()
+
+    # --single mode: run one problem in subprocess isolation
+    if args_cmd.single:
+        try:
+            problem_name = args_cmd.single
+            block_num = os.environ.get("BLOCK_NUM", "")
+            if args_cmd.params:
+                params_dict = json.loads(args_cmd.params)
+                para_names = params_dict.get('para_names')
+                para_values = params_dict.get('para_values')
+                para_defaults = params_dict.get('para_defaults')
+            else:
+                para_names, para_values, para_defaults = None, None, None
+            
+            block_num_int = int(block_num) if block_num else None
+            info = get_problem_info(problem_name, para_names, para_values, para_defaults, block_number=block_num_int)
+            result_single_path = os.path.join(saving_path, f'result_single_block{block_num}.json')
+            with open(result_single_path, "w") as f:
+                json.dump(_to_json_serializable(info), f, indent=None)
+            sys.exit(0)
+        except Exception as e:
+            print(f"[--single] Error processing {args_cmd.single if args_cmd.single else '?'}: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     # Set up logging
     log_name = 'log_pycutest.txt' if args_cmd.block is None else f'log_pycutest_block{args_cmd.block}.txt'
     log_file = open(os.path.join(saving_path, log_name), 'w')
     sys.stdout = Logger(log_file)
     sys.stderr = Logger(log_file)
+    
+    # Set block number in environment for subprocess
+    if args_cmd.block is not None:
+        os.environ['BLOCK_NUM'] = str(args_cmd.block)
 
     # Get all problem names (excluding blacklisted ones)
     problem_names_all = pycutest_select({})
@@ -629,7 +853,7 @@ if __name__ == "__main__":
         block_num = args_cmd.block
         print(f"\n=== Processing block {block_num + 1} of {num_blocks} (Matrix Mode) ===")
         pycutest_clear_all_cache()
-        collect_problem_info(block_num, problem_names_all)
+        collect_problem_info(block_num, problem_names_all, use_subprocess=True)
     else:
         # Original sequential processing
         # Check which blocks are already finished
@@ -652,8 +876,9 @@ if __name__ == "__main__":
 
             # Clear all cache before each block to prevent memory buildup
             pycutest_clear_all_cache()
+            os.environ['BLOCK_NUM'] = str(block_num)
 
-            collect_problem_info(block_num, problem_names_all)
+            collect_problem_info(block_num, problem_names_all, use_subprocess=True)
 
             print(f"=== Finished block {block_num + 1} of {num_blocks} ===\n")
 
