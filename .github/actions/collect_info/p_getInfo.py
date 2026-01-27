@@ -32,10 +32,10 @@ repo_root = os.path.abspath(os.path.join(cwd, '..', '..', '..'))
 
 # Add optiprofiler to the system path (checked out by GitHub Actions)
 sys.path.append(os.path.join(repo_root, 'optiprofiler'))
-sys.path.append(os.path.join(repo_root, 'optiprofiler', 'problems'))
+sys.path.append(os.path.join(repo_root, 'optiprofiler', 'python'))
 
 import optiprofiler
-from problems.pycutest.pycutest_tools import (
+from optiprofiler.problem_libs.pycutest.pycutest_tools import (
     pycutest_load, pycutest_select, pycutest_get_sif_params,
     pycutest_clear_cache, pycutest_clear_all_cache
 )
