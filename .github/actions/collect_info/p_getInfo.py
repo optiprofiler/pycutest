@@ -27,6 +27,8 @@ import gc
 import shutil
 import json
 import subprocess
+import signal
+import atexit
 
 # Get the repository root directory (three levels up from this script)
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -578,6 +580,40 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
     result_single_path = os.path.join(saving_path, f'result_single_block{block_number}.json')
     feas_file = os.path.join(saving_path, f'feasibility_pycutest_block{block_number}_temp.txt')
     timeout_file = os.path.join(saving_path, f'timeout_problems_pycutest_block{block_number}_temp.txt')
+    
+    # Cleanup function to be called on exit
+    def cleanup_on_exit():
+        """Cleanup function to save progress on exit"""
+        try:
+            if os.path.exists(current_prob_file):
+                try:
+                    os.remove(current_prob_file)
+                except:
+                    pass
+            # Finalize temp files
+            if os.path.exists(block_csv_temp):
+                try:
+                    if not os.path.exists(block_csv):
+                        shutil.move(block_csv_temp, block_csv)
+                        print(f"Saved progress to {block_csv}")
+                    else:
+                        # Merge with existing
+                        try:
+                            main_df = pd.read_csv(block_csv)
+                            temp_df = pd.read_csv(block_csv_temp)
+                            combined_df = pd.concat([main_df, temp_df]).drop_duplicates(subset=['problem_name'])
+                            combined_df.to_csv(block_csv, index=False, na_rep='nan')
+                            os.remove(block_csv_temp)
+                            print(f"Merged progress into {block_csv}")
+                        except Exception as e:
+                            print(f"Error merging in cleanup: {e}")
+                except Exception as e:
+                    print(f"Error in cleanup: {e}")
+        except Exception:
+            pass
+    
+    # Register cleanup function
+    atexit.register(cleanup_on_exit)
 
     # 1. Crash Detection: If current_problem file exists, the previous run crashed
     if os.path.exists(current_prob_file):
@@ -615,22 +651,30 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                      if name not in excluded_problems and name not in completed_problems]
 
     # 4. Process each problem
-    for name in problem_names:
-        print(f"\n>>> STARTING: {name}")
-        sys.stdout.flush()
-        sys.stderr.flush()
+    try:
+        for name in problem_names:
+            print(f"\n>>> STARTING: {name}")
+            sys.stdout.flush()
+            sys.stderr.flush()
 
-        # Write current problem name before processing to detect crashes
-        try:
-            with open(current_prob_file, 'w') as f:
-                f.write(name)
-        except Exception as e:
-            print(f"Warning: Could not write current problem file: {e}")
+            # Write current problem name before processing to detect crashes
+            try:
+                with open(current_prob_file, 'w') as f:
+                    f.write(name)
+            except Exception as e:
+                print(f"Warning: Could not write current problem file: {e}")
 
         if use_subprocess:
             # Run in subprocess for isolation - crashes only kill the child
+            cmd = None
             try:
-                para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                # Get parameters with error handling
+                try:
+                    para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                except Exception as e:
+                    print(f"Error getting SIF params for {name}: {e}. Using defaults.")
+                    para_names, para_values, para_defaults = None, None, None
+                
                 # Serialize parameters for subprocess
                 params_json = json.dumps({
                     'para_names': para_names,
@@ -641,12 +685,30 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                 # Pass block number via environment
                 env = os.environ.copy()
                 env['BLOCK_NUM'] = str(block_number)
-                ret = subprocess.run(cmd, cwd=repo_root, timeout=None, env=env)
+                # Also pass CUTEst environment variables to subprocess
+                for key in ['ARCHDEFS', 'SIFDECODE', 'CUTEST', 'MASTSIF', 'MYARCH', 'PATH']:
+                    if key in os.environ:
+                        env[key] = os.environ[key]
+                
+                ret = subprocess.run(cmd, cwd=repo_root, timeout=None, env=env, 
+                                    capture_output=False, stderr=subprocess.STDOUT)
             except subprocess.TimeoutExpired:
-                ret = subprocess.CompletedProcess(cmd, returncode=-1)
+                print(f"Subprocess timeout for {name}")
+                ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
+            except KeyboardInterrupt:
+                # Handle cancellation gracefully
+                print(f"\nInterrupted while processing {name}. Saving progress...")
+                if os.path.exists(current_prob_file):
+                    try:
+                        os.remove(current_prob_file)
+                    except:
+                        pass
+                raise  # Re-raise to allow cleanup
             except Exception as e:
                 print(f"Error running subprocess for {name}: {e}")
-                ret = subprocess.CompletedProcess(cmd, returncode=-1)
+                import traceback
+                traceback.print_exc()
+                ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
 
             if ret.returncode != 0:
                 print(f"Problem {name} crashed or failed (exit {ret.returncode}). Excluding and continuing.")
@@ -678,12 +740,26 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                 append_to_txt(exclude_file, name)
                 continue
         else:
-            # Direct processing (original method)
+            # Direct processing (original method) - not recommended, use subprocess instead
             try:
-                para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                try:
+                    para_names, para_values, para_defaults = pycutest_get_sif_params(name)
+                except Exception as e:
+                    print(f"Error getting SIF params for {name}: {e}. Using defaults.")
+                    para_names, para_values, para_defaults = None, None, None
                 info = get_problem_info(name, para_names, para_values, para_defaults, block_number=block_number)
+            except KeyboardInterrupt:
+                print(f"\nInterrupted while processing {name}. Saving progress...")
+                if os.path.exists(current_prob_file):
+                    try:
+                        os.remove(current_prob_file)
+                    except:
+                        pass
+                raise  # Re-raise to allow cleanup
             except Exception as e:
                 print(f"Error processing {name}: {e}")
+                import traceback
+                traceback.print_exc()
                 append_to_txt(exclude_file, name)
                 continue
 
@@ -694,39 +770,88 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                     return True
             return False
 
-        if not has_unknown_values(info):
-            try:
-                df_single = pd.DataFrame([info])
-                if not os.path.exists(block_csv_temp):
-                    df_single.to_csv(block_csv_temp, index=False, na_rep='nan')
-                else:
-                    df_single.to_csv(block_csv_temp, mode='a', header=False, index=False, na_rep='nan')
-            except Exception as e:
-                print(f"Error saving result for {name}: {e}")
-        else:
-            print(f"Filtered out problem {name} due to 'unknown' values.")
+        try:
+            if not has_unknown_values(info):
+                try:
+                    df_single = pd.DataFrame([info])
+                    if not os.path.exists(block_csv_temp):
+                        df_single.to_csv(block_csv_temp, index=False, na_rep='nan')
+                    else:
+                        df_single.to_csv(block_csv_temp, mode='a', header=False, index=False, na_rep='nan')
+                    print(f"Successfully saved result for {name}")
+                except Exception as e:
+                    print(f"Error saving result for {name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Try to save to a backup file
+                    try:
+                        backup_file = block_csv_temp + '.backup'
+                        df_single = pd.DataFrame([info])
+                        df_single.to_csv(backup_file, mode='a', header=not os.path.exists(backup_file), 
+                                       index=False, na_rep='nan')
+                        print(f"Saved to backup file: {backup_file}")
+                    except:
+                        pass
+            else:
+                print(f"Filtered out problem {name} due to 'unknown' values.")
+        except Exception as e:
+            print(f"Unexpected error while saving result for {name}: {e}")
+            import traceback
+            traceback.print_exc()
 
         # Remove current problem file after successful processing
         if os.path.exists(current_prob_file):
             try:
                 os.remove(current_prob_file)
-            except:
-                pass
+            except Exception as e:
+                print(f"Warning: Could not remove current problem file: {e}")
 
-        sys.stdout.flush()
-        sys.stderr.flush()
+            sys.stdout.flush()
+            sys.stderr.flush()
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user. Saving progress...")
+        # Don't re-raise, allow cleanup to happen
+    except Exception as e:
+        print(f"\n\nUnexpected error in main loop: {e}")
+        import traceback
+        traceback.print_exc()
+        # Continue to cleanup
 
     # 5. Finalize: Move temp file to final location
     if os.path.exists(block_csv_temp):
         try:
             shutil.move(block_csv_temp, block_csv)
+            print(f"Successfully moved temp file to final: {block_csv}")
         except Exception as e:
             print(f"Error moving temp file to final: {e}")
             # Fallback: copy instead of move
             try:
                 shutil.copy(block_csv_temp, block_csv)
-            except:
-                pass
+                print(f"Copied temp file to final: {block_csv}")
+            except Exception as e2:
+                print(f"Error copying temp file: {e2}")
+                # Last resort: keep temp file
+                print(f"Keeping temp file at: {block_csv_temp}")
+    
+    # Also check for backup file and merge if exists
+    backup_file = block_csv_temp + '.backup'
+    if os.path.exists(backup_file):
+        try:
+            print(f"Found backup file, merging with main file...")
+            if os.path.exists(block_csv):
+                main_df = pd.read_csv(block_csv)
+                backup_df = pd.read_csv(backup_file)
+                # Remove duplicates
+                combined_df = pd.concat([main_df, backup_df]).drop_duplicates(subset=['problem_name'])
+                combined_df.to_csv(block_csv, index=False, na_rep='nan')
+                os.remove(backup_file)
+                print(f"Merged backup file into main file")
+            else:
+                # No main file, use backup as main
+                shutil.move(backup_file, block_csv)
+                print(f"Used backup file as main file")
+        except Exception as e:
+            print(f"Error merging backup file: {e}")
 
     # Save auxiliary files (feasibility and timeout)
     try:
@@ -771,10 +896,14 @@ if __name__ == "__main__":
             problem_name = args_cmd.single
             block_num = os.environ.get("BLOCK_NUM", "")
             if args_cmd.params:
-                params_dict = json.loads(args_cmd.params)
-                para_names = params_dict.get('para_names')
-                para_values = params_dict.get('para_values')
-                para_defaults = params_dict.get('para_defaults')
+                try:
+                    params_dict = json.loads(args_cmd.params)
+                    para_names = params_dict.get('para_names')
+                    para_values = params_dict.get('para_values')
+                    para_defaults = params_dict.get('para_defaults')
+                except json.JSONDecodeError as e:
+                    print(f"[--single] Error parsing params JSON: {e}")
+                    para_names, para_values, para_defaults = None, None, None
             else:
                 para_names, para_values, para_defaults = None, None, None
             
@@ -784,6 +913,9 @@ if __name__ == "__main__":
             with open(result_single_path, "w") as f:
                 json.dump(_to_json_serializable(info), f, indent=None)
             sys.exit(0)
+        except KeyboardInterrupt:
+            print(f"[--single] Interrupted while processing {args_cmd.single}")
+            sys.exit(130)  # Standard exit code for SIGINT
         except Exception as e:
             print(f"[--single] Error processing {args_cmd.single if args_cmd.single else '?'}: {e}")
             import traceback
@@ -799,6 +931,16 @@ if __name__ == "__main__":
     # Set block number in environment for subprocess
     if args_cmd.block is not None:
         os.environ['BLOCK_NUM'] = str(args_cmd.block)
+    
+    # Register signal handlers for graceful shutdown (only in main process)
+    if not args_cmd.single:
+        def signal_handler(signum, frame):
+            print(f"\nReceived signal {signum}. Saving progress and exiting...")
+            # Cleanup will be handled by atexit
+            sys.exit(0)
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
 
     # Get all problem names (excluding blacklisted ones)
     problem_names_all = pycutest_select({})
