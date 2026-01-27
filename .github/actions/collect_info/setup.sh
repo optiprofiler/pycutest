@@ -23,7 +23,7 @@ git clone --depth 1 --branch v0.5 https://bitbucket.org/optrove/sif.git "$HOME/c
 export ARCHDEFS="$HOME/cutest/archdefs"
 export SIFDECODE="$HOME/cutest/sifdecode"
 export CUTEST="$HOME/cutest/cutest"
-export MASTSIF="$HOME/cutest/mastsif/sif"
+export MASTSIF="$HOME/cutest/mastsif"
 export MYARCH=pc64.lnx.gfo
 {
   echo "ARCHDEFS=$ARCHDEFS"

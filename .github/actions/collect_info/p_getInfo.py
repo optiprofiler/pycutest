@@ -43,7 +43,7 @@ if 'SIFDECODE' not in os.environ:
 if 'CUTEST' not in os.environ:
     os.environ['CUTEST'] = os.path.join(cutest_base, 'cutest')
 if 'MASTSIF' not in os.environ:
-    os.environ['MASTSIF'] = os.path.join(cutest_base, 'mastsif', 'sif')
+    os.environ['MASTSIF'] = os.path.join(cutest_base, 'mastsif')
 if 'MYARCH' not in os.environ:
     os.environ['MYARCH'] = 'pc64.lnx.gfo'
 

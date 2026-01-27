@@ -49,7 +49,7 @@ jobs:
           echo "ARCHDEFS=$HOME/cutest/archdefs" >> $GITHUB_ENV
           echo "SIFDECODE=$HOME/cutest/sifdecode" >> $GITHUB_ENV
           echo "CUTEST=$HOME/cutest/cutest" >> $GITHUB_ENV
-          echo "MASTSIF=$HOME/cutest/mastsif/sif" >> $GITHUB_ENV
+          echo "MASTSIF=$HOME/cutest/mastsif" >> $GITHUB_ENV
           echo "MYARCH=pc64.lnx.gfo" >> $GITHUB_ENV
           echo "$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin" >> $GITHUB_PATH
 
@@ -73,7 +73,7 @@ jobs:
           export ARCHDEFS=$HOME/cutest/archdefs
           export SIFDECODE=$HOME/cutest/sifdecode
           export CUTEST=$HOME/cutest/cutest
-          export MASTSIF=$HOME/cutest/mastsif/sif
+          export MASTSIF=$HOME/cutest/mastsif
           export MYARCH=pc64.lnx.gfo
           export PATH=$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin:$PATH
           python .github/actions/collect_info/p_getInfo.py --block ${{ matrix.block }}
