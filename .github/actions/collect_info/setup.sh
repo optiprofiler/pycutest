@@ -12,17 +12,18 @@ python -m pip install --upgrade pip
 python -m pip install -r .github/actions/collect_info/requirements.txt
 
 # Download CUTEst and its dependencies
-mkdir -p "$GITHUB_WORKSPACE/cutest"
-git clone --depth 1 --branch v2.2.3 https://github.com/ralna/ARCHDefs.git "$GITHUB_WORKSPACE/cutest/archdefs"
-git clone --depth 1 --branch v2.1.3 https://github.com/ralna/SIFDecode.git "$GITHUB_WORKSPACE/cutest/sifdecode"
-git clone --depth 1 --branch v2.0.42 https://github.com/ralna/CUTEst.git "$GITHUB_WORKSPACE/cutest/cutest"
-git clone --depth 1 --branch v0.5 https://bitbucket.org/optrove/sif.git "$GITHUB_WORKSPACE/cutest/mastsif"
+# Install to $HOME/cutest to match workflow environment variable settings
+mkdir -p "$HOME/cutest"
+git clone --depth 1 --branch v2.2.3 https://github.com/ralna/ARCHDefs.git "$HOME/cutest/archdefs"
+git clone --depth 1 --branch v2.1.3 https://github.com/ralna/SIFDecode.git "$HOME/cutest/sifdecode"
+git clone --depth 1 --branch v2.0.42 https://github.com/ralna/CUTEst.git "$HOME/cutest/cutest"
+git clone --depth 1 --branch v0.5 https://bitbucket.org/optrove/sif.git "$HOME/cutest/mastsif"
 
 # Set the environment variables for CUTEst
-export ARCHDEFS="$GITHUB_WORKSPACE/cutest/archdefs"
-export SIFDECODE="$GITHUB_WORKSPACE/cutest/sifdecode"
-export CUTEST="$GITHUB_WORKSPACE/cutest/cutest"
-export MASTSIF="$GITHUB_WORKSPACE/cutest/mastsif"
+export ARCHDEFS="$HOME/cutest/archdefs"
+export SIFDECODE="$HOME/cutest/sifdecode"
+export CUTEST="$HOME/cutest/cutest"
+export MASTSIF="$HOME/cutest/mastsif/sif"
 export MYARCH=pc64.lnx.gfo
 {
   echo "ARCHDEFS=$ARCHDEFS"

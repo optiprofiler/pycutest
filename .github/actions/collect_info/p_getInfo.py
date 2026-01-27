@@ -30,6 +30,33 @@ import shutil
 cwd = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.abspath(os.path.join(cwd, '..', '..', '..'))
 
+# Set CUTEst environment variables BEFORE importing pycutest
+# This is critical because pycutest checks these variables at import time
+# Use $HOME if available, otherwise fall back to ~ expansion
+home_dir = os.environ.get('HOME', os.path.expanduser('~'))
+cutest_base = os.path.join(home_dir, 'cutest')
+
+if 'ARCHDEFS' not in os.environ:
+    os.environ['ARCHDEFS'] = os.path.join(cutest_base, 'archdefs')
+if 'SIFDECODE' not in os.environ:
+    os.environ['SIFDECODE'] = os.path.join(cutest_base, 'sifdecode')
+if 'CUTEST' not in os.environ:
+    os.environ['CUTEST'] = os.path.join(cutest_base, 'cutest')
+if 'MASTSIF' not in os.environ:
+    os.environ['MASTSIF'] = os.path.join(cutest_base, 'mastsif', 'sif')
+if 'MYARCH' not in os.environ:
+    os.environ['MYARCH'] = 'pc64.lnx.gfo'
+
+# Add CUTEst binaries to PATH if not already there
+cutest_bin_paths = [
+    os.path.join(cutest_base, 'sifdecode', 'bin'),
+    os.path.join(cutest_base, 'cutest', 'bin')
+]
+current_path = os.environ.get('PATH', '')
+for bin_path in cutest_bin_paths:
+    if bin_path not in current_path:
+        os.environ['PATH'] = f"{bin_path}:{current_path}" if current_path else bin_path
+
 # Add optiprofiler to the system path (checked out by GitHub Actions)
 sys.path.append(os.path.join(repo_root, 'optiprofiler'))
 sys.path.append(os.path.join(repo_root, 'optiprofiler', 'python'))
