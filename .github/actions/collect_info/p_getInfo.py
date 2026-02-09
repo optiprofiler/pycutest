@@ -747,8 +747,22 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                         if key in os.environ:
                             env[key] = os.environ[key]
                     
+                    # Set memory limit for subprocess to avoid triggering system OOM killer
+                    # which causes GitHub Actions to cancel the entire job
+                    def set_memory_limit():
+                        import resource
+                        # Limit to 4GB (4 * 1024 * 1024 * 1024 bytes)
+                        # This is less than GitHub Actions' ~7GB, so process gets killed
+                        # before triggering system OOM killer
+                        mem_limit = 4 * 1024 * 1024 * 1024
+                        try:
+                            resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
+                        except Exception as e:
+                            print(f"Warning: Could not set memory limit: {e}")
+                    
                     ret = subprocess.run(cmd, cwd=repo_root, timeout=None, env=env, 
-                                        capture_output=False, stderr=subprocess.STDOUT)
+                                        capture_output=False, stderr=subprocess.STDOUT,
+                                        preexec_fn=set_memory_limit)
                 except subprocess.TimeoutExpired:
                     print(f"Subprocess timeout for {name}")
                     ret = subprocess.CompletedProcess(cmd if cmd else [], returncode=-1)
