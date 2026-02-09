@@ -61,6 +61,14 @@ jobs:
           submodules: recursive
           ref: reorganize
 
+      - name: Copy current repo to OptiProfiler problem_libs
+        run: |
+          # Ensure the target directory exists
+          mkdir -p optiprofiler/python/optiprofiler/problem_libs/pycutest
+          # Copy all files except optiprofiler and .github directories
+          rsync -av --exclude='optiprofiler' --exclude='.github' --exclude='.git' . optiprofiler/python/optiprofiler/problem_libs/pycutest/
+          echo "Copied current repo files to optiprofiler/python/optiprofiler/problem_libs/pycutest"
+
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip

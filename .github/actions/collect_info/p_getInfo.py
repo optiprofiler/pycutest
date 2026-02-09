@@ -30,6 +30,9 @@ import subprocess
 import signal
 import atexit
 
+# Global flag for graceful shutdown
+shutdown_requested = False
+
 # Get the repository root directory (three levels up from this script)
 cwd = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.abspath(os.path.join(cwd, '..', '..', '..'))
@@ -484,7 +487,8 @@ def get_problem_info(problem_name, para_names=None, para_values=None, para_defau
         finally:
             # Always clean up
             try:
-                pycutest_clear_cache(problem_name, **dict(zip(para_names, comb)))
+                converted_comb = [convert_param_value(v) for v in comb]
+                pycutest_clear_cache(problem_name, **dict(zip(para_names, converted_comb)))
             except:
                 pass
             gc.collect()
@@ -506,6 +510,30 @@ def get_problem_info(problem_name, para_names=None, para_values=None, para_defau
     return info_single
 
 
+def convert_param_value(val):
+    """Convert numpy types to native Python types for pycutest parameters."""
+    if isinstance(val, np.str_):
+        # Try to convert string to number if possible
+        s = str(val)
+        try:
+            # Try int first
+            return int(s)
+        except ValueError:
+            try:
+                # Try float
+                return float(s)
+            except ValueError:
+                # Keep as string
+                return s
+    elif isinstance(val, (np.integer, np.int64, np.int32)):
+        return int(val)
+    elif isinstance(val, (np.floating, np.float64, np.float32)):
+        return float(val)
+    elif isinstance(val, np.ndarray):
+        return val.item() if val.size == 1 else val.tolist()
+    return val
+
+
 def process_parametric_problem(problem_name, para_names, comb):
     """
     Process a single parametric problem configuration.
@@ -513,7 +541,9 @@ def process_parametric_problem(problem_name, para_names, comb):
     Returns a dict with problem info, or None on failure.
     """
     def _load_and_extract():
-        para_dict = dict(zip(para_names, comb))
+        # Convert numpy types to native Python types
+        converted_comb = [convert_param_value(v) for v in comb]
+        para_dict = dict(zip(para_names, converted_comb))
         p = pycutest_load(problem_name, **para_dict)
 
         result = {}
@@ -665,8 +695,19 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                      if name not in excluded_problems and name not in completed_problems]
 
     # 4. Process each problem
+    # Track consecutive OOM kills to detect memory pressure
+    consecutive_oom_count = 0
+    max_consecutive_oom = 3  # Exit after this many consecutive OOM kills
+    
     try:
         for name in problem_names:
+            # Check for shutdown request (from SIGTERM)
+            global shutdown_requested
+            if shutdown_requested:
+                print(f"\nShutdown requested. Stopping processing and saving progress...")
+                sys.stdout.flush()
+                break
+            
             print(f"\n>>> STARTING: {name}")
             sys.stdout.flush()
             sys.stderr.flush()
@@ -727,6 +768,19 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                 if ret.returncode != 0:
                     print(f"Problem {name} crashed or failed (exit {ret.returncode}). Excluding and continuing.")
                     append_to_txt(exclude_file, name)
+                    
+                    # Track OOM kills (exit -9 = SIGKILL, often from OOM killer)
+                    if ret.returncode == -9:
+                        consecutive_oom_count += 1
+                        print(f"Warning: OOM kill detected ({consecutive_oom_count}/{max_consecutive_oom})")
+                        if consecutive_oom_count >= max_consecutive_oom:
+                            print(f"Too many consecutive OOM kills. System memory may be exhausted. Saving progress and exiting...")
+                            sys.stdout.flush()
+                            break
+                    else:
+                        # Reset counter for non-OOM failures
+                        consecutive_oom_count = 0
+                    
                     if os.path.exists(current_prob_file):
                         try:
                             os.remove(current_prob_file)
@@ -738,6 +792,9 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                         except:
                             pass
                     continue
+                
+                # Reset OOM counter on successful subprocess completion
+                consecutive_oom_count = 0
 
                 # Load result from JSON
                 if os.path.exists(result_single_path):
@@ -784,41 +841,41 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                         return True
                 return False
 
-        try:
-            if not has_unknown_values(info):
-                try:
-                    df_single = pd.DataFrame([info])
-                    if not os.path.exists(block_csv_temp):
-                        df_single.to_csv(block_csv_temp, index=False, na_rep='nan')
-                    else:
-                        df_single.to_csv(block_csv_temp, mode='a', header=False, index=False, na_rep='nan')
-                    print(f"Successfully saved result for {name}")
-                except Exception as e:
-                    print(f"Error saving result for {name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # Try to save to a backup file
-                    try:
-                        backup_file = block_csv_temp + '.backup'
-                        df_single = pd.DataFrame([info])
-                        df_single.to_csv(backup_file, mode='a', header=not os.path.exists(backup_file), 
-                                       index=False, na_rep='nan')
-                        print(f"Saved to backup file: {backup_file}")
-                    except:
-                        pass
-            else:
-                print(f"Filtered out problem {name} due to 'unknown' values.")
-        except Exception as e:
-            print(f"Unexpected error while saving result for {name}: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # Remove current problem file after successful processing
-        if os.path.exists(current_prob_file):
             try:
-                os.remove(current_prob_file)
+                if not has_unknown_values(info):
+                    try:
+                        df_single = pd.DataFrame([info])
+                        if not os.path.exists(block_csv_temp):
+                            df_single.to_csv(block_csv_temp, index=False, na_rep='nan')
+                        else:
+                            df_single.to_csv(block_csv_temp, mode='a', header=False, index=False, na_rep='nan')
+                        print(f"Successfully saved result for {name}")
+                    except Exception as e:
+                        print(f"Error saving result for {name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # Try to save to a backup file
+                        try:
+                            backup_file = block_csv_temp + '.backup'
+                            df_single = pd.DataFrame([info])
+                            df_single.to_csv(backup_file, mode='a', header=not os.path.exists(backup_file), 
+                                           index=False, na_rep='nan')
+                            print(f"Saved to backup file: {backup_file}")
+                        except:
+                            pass
+                else:
+                    print(f"Filtered out problem {name} due to 'unknown' values.")
             except Exception as e:
-                print(f"Warning: Could not remove current problem file: {e}")
+                print(f"Unexpected error while saving result for {name}: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # Remove current problem file after successful processing
+            if os.path.exists(current_prob_file):
+                try:
+                    os.remove(current_prob_file)
+                except Exception as e:
+                    print(f"Warning: Could not remove current problem file: {e}")
 
             sys.stdout.flush()
             sys.stderr.flush()
@@ -946,12 +1003,17 @@ if __name__ == "__main__":
     if args_cmd.block is not None:
         os.environ['BLOCK_NUM'] = str(args_cmd.block)
     
-    # Ignore SIGTERM in the main process so that only subprocesses are killed.
-    # When a subprocess is killed (by SIGTERM, timeout, etc.), it returns non-zero,
-    # and the main process will exclude the problem and continue with the next one.
-    # This is the same approach as s2mpj_python.
+    # Graceful SIGTERM handling: set flag and allow loop to exit cleanly
+    # This ensures that when GitHub Actions sends SIGTERM, we can save progress
+    # before being killed by SIGKILL (which is sent if we don't exit in time)
+    def sigterm_handler(signum, frame):
+        global shutdown_requested
+        print(f"\nReceived signal {signum}. Will shutdown gracefully after saving progress...")
+        sys.stdout.flush()
+        shutdown_requested = True
+    
     if not args_cmd.single:
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, sigterm_handler)
         # For SIGINT (Ctrl+C), we still want to be able to interrupt for debugging
         # signal.signal(signal.SIGINT, signal.SIG_IGN)
 
