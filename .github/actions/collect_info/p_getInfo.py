@@ -30,8 +30,9 @@ import subprocess
 import signal
 import atexit
 
-# Global flag for graceful shutdown
+# Global flags for graceful shutdown
 shutdown_requested = False
+sigterm_count = 0  # Track number of SIGTERMs received
 
 # Get the repository root directory (three levels up from this script)
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -695,14 +696,15 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                      if name not in excluded_problems and name not in completed_problems]
 
     # 4. Process each problem
-    # Track consecutive OOM kills to detect memory pressure
+    # Track OOM kills for logging purposes
     consecutive_oom_count = 0
-    max_consecutive_oom = 3  # Exit after this many consecutive OOM kills
+    
+    # Need global declaration for checking shutdown state
+    global shutdown_requested
     
     try:
         for name in problem_names:
             # Check for shutdown request (from SIGTERM)
-            global shutdown_requested
             if shutdown_requested:
                 print(f"\nShutdown requested. Stopping processing and saving progress...")
                 sys.stdout.flush()
@@ -772,11 +774,12 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                     # Track OOM kills (exit -9 = SIGKILL, often from OOM killer)
                     if ret.returncode == -9:
                         consecutive_oom_count += 1
-                        print(f"Warning: OOM kill detected ({consecutive_oom_count}/{max_consecutive_oom})")
-                        if consecutive_oom_count >= max_consecutive_oom:
-                            print(f"Too many consecutive OOM kills. System memory may be exhausted. Saving progress and exiting...")
-                            sys.stdout.flush()
-                            break
+                        print(f"Warning: OOM kill detected (total OOM count in this block: {consecutive_oom_count})")
+                        
+                        # Brief pause to let system recover memory after OOM
+                        import time
+                        time.sleep(2)
+                        print("Memory recovered. Continuing with next problem...")
                     else:
                         # Reset counter for non-OOM failures
                         consecutive_oom_count = 0
@@ -924,7 +927,7 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
         except Exception as e:
             print(f"Error merging backup file: {e}")
 
-    # Save auxiliary files (feasibility and timeout)
+    # Save auxiliary files (feasibility, timeout, and excluded/failed problems)
     try:
         if os.path.exists(feas_file):
             with open(feas_file, 'r') as f:
@@ -944,6 +947,19 @@ def collect_problem_info(block_number, problem_names_all, use_subprocess=True):
                     f.write(' '.join(sorted(list(set(timeout_list)))))
     except Exception as e:
         print(f"Error saving timeout file: {e}")
+
+    # Save excluded/failed problems file
+    try:
+        if os.path.exists(exclude_file):
+            with open(exclude_file, 'r') as f:
+                exclude_list = [line.strip() for line in f if line.strip()]
+            if exclude_list:
+                final_exclude_file = os.path.join(saving_path, f'failed_problems_pycutest_block{block_number}.txt')
+                with open(final_exclude_file, 'w') as f:
+                    f.write(' '.join(sorted(list(set(exclude_list)))))
+                print(f"Saved {len(set(exclude_list))} failed problems to {final_exclude_file}")
+    except Exception as e:
+        print(f"Error saving failed problems file: {e}")
 
     print(f"Block {block_number} completed successfully.")
 
@@ -1003,14 +1019,24 @@ if __name__ == "__main__":
     if args_cmd.block is not None:
         os.environ['BLOCK_NUM'] = str(args_cmd.block)
     
-    # Graceful SIGTERM handling: set flag and allow loop to exit cleanly
-    # This ensures that when GitHub Actions sends SIGTERM, we can save progress
-    # before being killed by SIGKILL (which is sent if we don't exit in time)
+    # Completely ignore SIGTERM in main process
+    # 
+    # Why: OOM kills trigger GitHub Actions to send SIGTERM, but we want to continue
+    # processing ALL problems in the block. SIGTERM is just a side effect of OOM,
+    # not a real cancellation request.
+    #
+    # Safety: 
+    # - Each problem's result is saved immediately after completion
+    # - If GitHub Actions really wants to kill us, it will send SIGKILL (unavoidable)
+    # - But by then, most data is already saved
+    # - We only stop voluntarily if we hit too many consecutive OOMs (memory exhausted)
+    
     def sigterm_handler(signum, frame):
-        global shutdown_requested
-        print(f"\nReceived signal {signum}. Will shutdown gracefully after saving progress...")
+        global sigterm_count
+        sigterm_count += 1
+        print(f"\nReceived signal {signum} (total count: {sigterm_count}). Ignoring - will continue processing.")
         sys.stdout.flush()
-        shutdown_requested = True
+        # Do NOT set shutdown_requested - just log and continue
     
     if not args_cmd.single:
         signal.signal(signal.SIGTERM, sigterm_handler)

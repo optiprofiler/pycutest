@@ -90,8 +90,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: probinfo_block_${{ matrix.block }}
-          path: probinfo_pycutest_block${{ matrix.block }}.csv
+          path: |
+            probinfo_pycutest_block${{ matrix.block }}.csv
+            failed_problems_pycutest_block${{ matrix.block }}.txt
+            feasibility_pycutest_block${{ matrix.block }}.txt
+            timeout_problems_pycutest_block${{ matrix.block }}.txt
           retention-days: 1
+          if-no-files-found: ignore
 
   merge-results:
     needs: collect-blocks
@@ -113,6 +118,7 @@ jobs:
       - name: Move artifacts to root
         run: |
           find artifacts -name "*.csv" -exec cp {} . \;
+          find artifacts -name "*.txt" -exec cp {} . \;
 
       - name: Install pandas
         run: pip install pandas
@@ -126,5 +132,7 @@ jobs:
           name: probinfo-files-pycutest
           path: |
             probinfo_pycutest.csv
+            failed_problems_pycutest.txt
             feasibility_pycutest.txt
             timeout_problems_pycutest.txt
+          if-no-files-found: ignore
