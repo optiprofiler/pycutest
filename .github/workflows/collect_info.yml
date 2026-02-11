@@ -59,7 +59,7 @@ jobs:
           repository: optiprofiler/optiprofiler
           path: optiprofiler
           submodules: recursive
-          ref: reorganize
+          ref: main
 
       - name: Copy current repo to OptiProfiler problem_libs
         run: |
