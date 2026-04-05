@@ -20,20 +20,46 @@ from optiprofiler.opclasses import Problem
 
 def pycutest_load(problem_name, **kwargs):
     """
-    Load a problem from pycutest and return a Problem instance.
+    Convert a PyCUTEst problem name to a `Problem` instance.
+
+    PyCUTEst is a Python interface to the CUTEst optimization test
+    environment. More details can be found at
+    `the PyCUTEst documentation <https://jfowkes.github.io/pycutest/>`_.
+
+    .. note::
+
+        PyCUTEst is only available on Linux and macOS.
 
     Parameters
     ----------
     problem_name : str
-        The name of the problem in pycutest to load. It may include SIF parameters in the format
-        '_{paramname}_{paramvalue}' appended to the base problem name.
-    **kwargs : dict
-        Additional keyword arguments (only for problems with available SIF parameters).
-    
+        Name of the problem in PyCUTEst. You may use `pycutest_select`
+        to get the problem names that satisfy your criteria.
+
     Returns
     -------
-    `Problem`
-        An instance of the Problem class.
+    optiprofiler.Problem
+        A ``Problem`` instance corresponding to the named problem.
+
+    Notes
+    -----
+    The problem name may include SIF parameters in the format
+    ``'PROBLEMNAME_paramname_paramvalue'`` (e.g., ``'ARGLINA_N_100'``).
+    In this case, the function will parse the parameters and pass them
+    to PyCUTEst automatically.
+
+    See Also
+    --------
+    pycutest_select : Select problems from PyCUTEst by criteria.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from optiprofiler.problem_libs.pycutest import pycutest_load
+
+        problem = pycutest_load('ROSENBR')
+        print(problem.n)  # 2
     """
 
     # Check if 'problem_name' has the pattern '_{paramname}_{paramvalue}'. If it has, we load the problem with the specified SIF parameters.
@@ -184,51 +210,99 @@ def pycutest_load(problem_name, **kwargs):
 
 def pycutest_select(options):
     """
-    Select problems from the pycutest collection that satisfy given criteria.
-    
+    Select problems from PyCUTEst that satisfy given criteria.
+
+    More details about PyCUTEst can be found at
+    `the PyCUTEst documentation <https://jfowkes.github.io/pycutest/>`_.
+
+    .. note::
+
+        PyCUTEst is only available on Linux and macOS.
+
     Parameters
     ----------
     options : dict
-        A dictionary containing selection criteria:
-        - ptype: problem type, string containing any of 'u', 'b', 'l', 'n' 
-                 (default: 'ubln')
-        - mindim: minimum dimension (default: 1)
-        - maxdim: maximum dimension (default: inf)
-        - minb: minimum number of bound constraints (default: 0)
-        - maxb: maximum number of bound constraints (default: inf)
-        - minlcon: minimum number of linear constraints (default: 0)
-        - maxlcon: maximum number of linear constraints (default: inf)
-        - minnlcon: minimum number of nonlinear constraints (default: 0)
-        - maxnlcon: maximum number of nonlinear constraints (default: inf)
-        - mincon: minimum total number of constraints (default: 0)
-        - maxcon: maximum total number of constraints (default: inf)
-        - excludelist: list of problems to exclude (default: [])
-    
+        A dictionary containing selection criteria. Supported keys:
+
+        - **ptype** (*str*) -- Type of problems to select. A string
+          consisting of any combination of ``'u'`` (unconstrained),
+          ``'b'`` (bound constrained), ``'l'`` (linearly constrained),
+          and ``'n'`` (nonlinearly constrained), such as ``'b'``,
+          ``'ul'``, ``'ubn'``. Default is ``'ubln'``.
+        - **mindim** (*int*) -- Minimum dimension. Default is ``1``.
+        - **maxdim** (*int*) -- Maximum dimension. Default is ``inf``.
+        - **minb** (*int*) -- Minimum number of bound constraints.
+          Default is ``0``.
+        - **maxb** (*int*) -- Maximum number of bound constraints.
+          Default is ``inf``.
+        - **minlcon** (*int*) -- Minimum number of linear constraints.
+          Default is ``0``.
+        - **maxlcon** (*int*) -- Maximum number of linear constraints.
+          Default is ``inf``.
+        - **minnlcon** (*int*) -- Minimum number of nonlinear constraints.
+          Default is ``0``.
+        - **maxnlcon** (*int*) -- Maximum number of nonlinear constraints.
+          Default is ``inf``.
+        - **mincon** (*int*) -- Minimum total number of linear and
+          nonlinear constraints. Default is ``0``.
+        - **maxcon** (*int*) -- Maximum total number of linear and
+          nonlinear constraints. Default is ``inf``.
+        - **excludelist** (*list of str*) -- List of problem names to
+          exclude. Default is ``[]``.
+
     Returns
     -------
-    list
-        A list of problem names that satisfy the criteria.
+    list of str
+        Problem names that satisfy the given criteria.
+
+    Notes
+    -----
+    1. PyCUTEst is only available on Linux and macOS.
+
+    2. There is a file ``config.txt`` in the same directory as this
+       module. It can be used to set the options ``variable_size`` and
+       ``test_feasibility_problems``. See the comments in ``config.txt``
+       for details. You can also override these options at runtime using
+       `set_plib_config` or by setting environment variables
+       ``PYCUTEST_VARIABLE_SIZE`` and
+       ``PYCUTEST_TEST_FEASIBILITY_PROBLEMS``. Environment variables
+       take precedence over ``config.txt``.
+
+    See Also
+    --------
+    pycutest_load : Load a problem from PyCUTEst.
+    optiprofiler.get_plib_config : Read the current configuration.
+    optiprofiler.set_plib_config : Override configuration at runtime.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from optiprofiler.problem_libs.pycutest import pycutest_select
+
+        names = pycutest_select({'ptype': 'u', 'maxdim': 5})
     """
-    # Set default options in the config file if not provided.
+    # Read config: environment variables (set via set_plib_config) take
+    # precedence over the values in config.txt.
     variable_size = 'default'
     test_feasibility_problems = 0
-    # Check if 'config.txt' exists under the same directory as this script
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(current_dir, 'config.txt')
     if os.path.exists(config_path):
         try:
             with open(config_path, 'r') as f:
-                # Find the line starting with 'variable_size=' and 'test_feasibility_problems='
-                lines = f.readlines()
-                for line in lines:
-                    if line.strip().startswith('variable_size='):
-                        variable_size = line.strip().split('=')[1].strip()
-                        variable_size = variable_size.split('#')[0].split('%')[0].strip()
-                    elif line.strip().startswith('test_feasibility_problems='):
-                        test_feasibility_problems = line.strip().split('=')[1].strip()
-                        test_feasibility_problems = int(test_feasibility_problems.split('#')[0].split('%')[0].strip())
-        except:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped.startswith('variable_size='):
+                        variable_size = stripped.split('=')[1].split('#')[0].split('%')[0].strip()
+                    elif stripped.startswith('test_feasibility_problems='):
+                        test_feasibility_problems = int(stripped.split('=')[1].split('#')[0].split('%')[0].strip())
+        except Exception:
             pass
+    if 'PYCUTEST_VARIABLE_SIZE' in os.environ:
+        variable_size = os.environ['PYCUTEST_VARIABLE_SIZE']
+    if 'PYCUTEST_TEST_FEASIBILITY_PROBLEMS' in os.environ:
+        test_feasibility_problems = int(os.environ['PYCUTEST_TEST_FEASIBILITY_PROBLEMS'])
     
     if variable_size not in ['default', 'min', 'max', 'all']:
         raise ValueError("Invalid `variable_size` in the file `config.txt`. Please set it to 'default', 'min', 'max', or 'all'.")
