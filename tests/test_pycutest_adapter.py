@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from contextlib import contextmanager
 import math
 import os
 import random
@@ -30,6 +31,24 @@ try:
 except Exception as exc:  # pragma: no cover - exercised on machines without CUTEst.
     IMPORT_ERROR = exc
     pycutest_clear_all_cache = pycutest_load = pycutest_select = None
+
+
+@contextmanager
+def _temporary_env(**updates):
+    previous = {key: os.environ.get(key) for key in updates}
+    try:
+        for key, value in updates.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = str(value)
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _as_array(value):
@@ -81,6 +100,45 @@ class PyCUTEstAdapterTests(unittest.TestCase):
         for problem_name in sample:
             with self.subTest(problem=problem_name):
                 self.assert_problem_contract(problem_name)
+
+    def test_config_environment_overrides_variable_size(self):
+        options = {
+            "ptype": "u",
+            "maxdim": 10,
+            "maxb": 20,
+            "maxlcon": 20,
+            "maxnlcon": 20,
+            "maxcon": 20,
+        }
+        with _temporary_env(
+            PYCUTEST_VARIABLE_SIZE=None,
+            PYCUTEST_TEST_FEASIBILITY_PROBLEMS=None,
+        ):
+            default_names = pycutest_select(dict(options))
+        with _temporary_env(
+            PYCUTEST_VARIABLE_SIZE="all",
+            PYCUTEST_TEST_FEASIBILITY_PROBLEMS="0",
+        ):
+            all_names = pycutest_select(dict(options))
+
+        self.assertGreater(len(all_names), len(default_names))
+        self.assertTrue(any(name.startswith("HILBERTA_N_") for name in all_names))
+        self.assertFalse(any(name.startswith("HILBERTA_N_") for name in default_names))
+
+    def test_config_environment_accepts_feasibility_modes_and_rejects_invalid_values(self):
+        options = {"ptype": "ubln", "maxdim": 10}
+        with _temporary_env(PYCUTEST_TEST_FEASIBILITY_PROBLEMS="0"):
+            baseline = pycutest_select(dict(options))
+        with _temporary_env(PYCUTEST_TEST_FEASIBILITY_PROBLEMS="2"):
+            all_names = pycutest_select(dict(options))
+        self.assertGreaterEqual(len(all_names), len(baseline))
+
+        with _temporary_env(PYCUTEST_VARIABLE_SIZE="not-a-mode"):
+            with self.assertRaises(ValueError):
+                pycutest_select(dict(options))
+        with _temporary_env(PYCUTEST_TEST_FEASIBILITY_PROBLEMS="3"):
+            with self.assertRaises(ValueError):
+                pycutest_select(dict(options))
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ The `CI` workflow runs daily and on pushes on Linux. It installs CUTEst/PyCUTEst
 
 - load `ROSENBR` through `pycutest_load` and evaluate `fun`, `cub`, and `ceq`;
 - select small problems through `pycutest_select`;
+- check `variable_size` and `test_feasibility_problems` environment overrides;
 - sample a few additional small problems each day with at most two numerical-library threads.
 
 If PyCUTEst is not installed locally, the Python tests are skipped. From this repository:
