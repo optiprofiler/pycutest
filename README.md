@@ -113,4 +113,12 @@ The `Collect Problem Info` workflow regenerates the metadata used by `pycutest_s
 
 ## Provenance and License
 
-This repository provides an OptiProfiler adapter and metadata for [PyCUTEst](https://github.com/jfowkes/pycutest). PyCUTEst is licensed under GPL-3.0. CUTEst and MASTSIF are separate upstream projects with their own citation and license requirements; please follow the upstream guidance when using the collection.
+The OptiProfiler adapter code and generated metadata in this repository are
+licensed under the [BSD 3-Clause License](LICENSE). The built distribution does
+not include PyCUTEst, CUTEst, or MASTSIF source code or compiled libraries.
+
+[PyCUTEst](https://github.com/jfowkes/pycutest) is an optional external runtime
+dependency licensed under GPL-3.0-or-later. CUTEst and MASTSIF are installed
+separately and retain their own upstream provenance, citation, and license
+requirements. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the
+component boundaries and upstream links.
