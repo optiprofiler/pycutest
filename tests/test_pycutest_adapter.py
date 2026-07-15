@@ -27,10 +27,20 @@ sys.path.insert(0, str(REPO_DIR))
 
 IMPORT_ERROR = None
 try:
-    from pycutest_tools import pycutest_clear_all_cache, pycutest_load, pycutest_select
+    from pycutest_tools import (
+        pycutest_clear_all_cache,
+        pycutest_check_available,
+        pycutest_get_default_options,
+        pycutest_load,
+        pycutest_select,
+        pycutest_validate_options,
+    )
+    pycutest_check_available()
 except Exception as exc:  # pragma: no cover - exercised on machines without CUTEst.
     IMPORT_ERROR = exc
-    pycutest_clear_all_cache = pycutest_load = pycutest_select = None
+    pycutest_check_available = pycutest_clear_all_cache = None
+    pycutest_get_default_options = None
+    pycutest_load = pycutest_select = pycutest_validate_options = None
 
 
 @contextmanager
@@ -139,6 +149,33 @@ class PyCUTEstAdapterTests(unittest.TestCase):
         with _temporary_env(PYCUTEST_TEST_FEASIBILITY_PROBLEMS="3"):
             with self.assertRaises(ValueError):
                 pycutest_select(dict(options))
+
+    def test_explicit_options_override_environment_and_reach_load(self):
+        library_options = {
+            "variable_size": "default",
+            "test_feasibility_problems": 0,
+        }
+        with _temporary_env(PYCUTEST_VARIABLE_SIZE="not-a-mode"):
+            selected = pycutest_select(
+                {"ptype": "u", "mindim": 2, "maxdim": 2},
+                library_options,
+            )
+        self.assertIn("ROSENBR", selected)
+        problem = pycutest_load("ROSENBR", library_options=library_options)
+        self.assertEqual(problem.n, 2)
+
+    def test_library_option_callbacks_are_strict(self):
+        self.assertEqual(
+            set(pycutest_get_default_options()),
+            {"variable_size", "test_feasibility_problems"},
+        )
+        with self.assertRaises(ValueError):
+            pycutest_validate_options({"variable_size": "all", "unknown": 1})
+        with self.assertRaises(ValueError):
+            pycutest_validate_options({
+                "variable_size": [],
+                "test_feasibility_problems": 0,
+            })
 
 
 if __name__ == "__main__":

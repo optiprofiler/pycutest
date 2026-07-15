@@ -1,24 +1,80 @@
 import sys, os, io, re, importlib, shutil
+from collections.abc import Mapping
 from contextlib import redirect_stdout
+from pathlib import Path
 import numpy as np
 import pandas as pd
 
 import builtins
 builtins.np = np  # Make numpy available globally as 'np'
 
-# Set the destination directory for pycutest cache.
-current_dir = os.path.dirname(os.path.abspath(__file__))
-cache_dir = os.path.join(current_dir, '__pycutest_cache__')
-os.makedirs(cache_dir, exist_ok=True)
-if cache_dir not in sys.path:
-    sys.path.append(cache_dir)
-os.environ['PYCUTEST_CACHE'] = cache_dir
-import pycutest
+_PYCUTEST_MODULE = None
+_PYCUTEST_CACHE_DIR = None
 
 # Import Problem class from optiprofiler
 from optiprofiler.opclasses import Problem
 
-def pycutest_load(problem_name, **kwargs):
+
+def _get_pycutest():
+    """Import PyCUTEst only when its runtime is actually needed."""
+    global _PYCUTEST_MODULE
+    if _PYCUTEST_MODULE is None:
+        _configure_pycutest_cache()
+        _PYCUTEST_MODULE = importlib.import_module('pycutest')
+    return _PYCUTEST_MODULE
+
+
+def _configure_pycutest_cache():
+    """Configure a writable cache without touching the installed package."""
+    global _PYCUTEST_CACHE_DIR
+    if _PYCUTEST_CACHE_DIR is not None:
+        return _PYCUTEST_CACHE_DIR
+
+    configured = os.environ.get('PYCUTEST_CACHE')
+    if configured:
+        cache_path = Path(configured).expanduser()
+    else:
+        cache_root = Path(
+            os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')
+        ).expanduser()
+        cache_path = cache_root / 'optiprofiler' / 'pycutest'
+        os.environ['PYCUTEST_CACHE'] = str(cache_path)
+
+    cache_path.mkdir(parents=True, exist_ok=True)
+    cache_dir = str(cache_path.resolve())
+    if cache_dir not in sys.path:
+        sys.path.append(cache_dir)
+    _PYCUTEST_CACHE_DIR = cache_dir
+    return cache_dir
+
+
+def pycutest_check_available():
+    """Raise an informative exception when PyCUTEst/CUTEst is unavailable."""
+    try:
+        _get_pycutest()
+    except Exception as exc:
+        raise RuntimeError(
+            'PyCUTEst/CUTEst is unavailable. Install the optional runtime '
+            'dependencies and configure CUTEst before selecting the '
+            '`pycutest` problem library.'
+        ) from exc
+
+
+def pycutest_collect_info():
+    """Return the committed PyCUTEst problem information table."""
+    probinfo_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        'probinfo_pycutest.csv',
+    )
+    try:
+        return pd.read_csv(probinfo_path).to_dict(orient='records')
+    except Exception as exc:
+        raise FileNotFoundError(
+            f'Could not find or load problem info file at {probinfo_path}'
+        ) from exc
+
+
+def pycutest_load(problem_name, library_options=None, **kwargs):
     """
     Convert a PyCUTEst problem name to a `Problem` instance.
 
@@ -35,6 +91,10 @@ def pycutest_load(problem_name, **kwargs):
     problem_name : str
         Name of the problem in PyCUTEst. You may use `pycutest_select`
         to get the problem names that satisfy your criteria.
+    library_options : dict, optional
+        Validated PyCUTEst options supplied by OptiProfiler. They currently
+        affect problem selection rather than loading, but accepting the same
+        mapping keeps selector and worker behavior explicit.
 
     Returns
     -------
@@ -62,10 +122,19 @@ def pycutest_load(problem_name, **kwargs):
         print(problem.n)  # 2
     """
 
+    if library_options is not None:
+        pycutest_validate_options(library_options)
+
     # Check if 'problem_name' has the pattern '_{paramname}_{paramvalue}'. If it has, we load the problem with the specified SIF parameters.
     problem_name, params = _parse_problem_name(problem_name)
     if params:
-        return pycutest_load(problem_name, **params)
+        return pycutest_load(
+            problem_name,
+            library_options=library_options,
+            **params,
+        )
+
+    pycutest = _get_pycutest()
 
     # Initialize CUTEst problem
     p = pycutest.import_problem(problem_name, destination=problem_name, sifParams=kwargs)
@@ -208,7 +277,102 @@ def pycutest_load(problem_name, **kwargs):
 
     return problem
 
-def pycutest_select(options):
+def pycutest_get_default_options():
+    """Return raw package and environment-level option defaults.
+
+    Validation is deliberately deferred until higher-priority process and
+    per-run overrides have been merged by OptiProfiler.
+    """
+    config = {
+        'variable_size': 'default',
+        'test_feasibility_problems': 0,
+    }
+    config_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        'config.txt',
+    )
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped.startswith('variable_size='):
+                        config['variable_size'] = (
+                            stripped.split('=', 1)[1]
+                            .split('#', 1)[0]
+                            .split('%', 1)[0]
+                            .strip()
+                        )
+                    elif stripped.startswith('test_feasibility_problems='):
+                        value = (
+                            stripped.split('=', 1)[1]
+                            .split('#', 1)[0]
+                            .split('%', 1)[0]
+                            .strip()
+                        )
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            pass
+                        config['test_feasibility_problems'] = value
+        except Exception:
+            pass
+    if 'PYCUTEST_VARIABLE_SIZE' in os.environ:
+        config['variable_size'] = os.environ['PYCUTEST_VARIABLE_SIZE']
+    if 'PYCUTEST_TEST_FEASIBILITY_PROBLEMS' in os.environ:
+        value = os.environ['PYCUTEST_TEST_FEASIBILITY_PROBLEMS']
+        try:
+            value = int(value)
+        except ValueError:
+            pass
+        config['test_feasibility_problems'] = value
+    return config
+
+
+def pycutest_validate_options(options):
+    """Validate and normalize PyCUTEst-specific benchmark options."""
+    if not isinstance(options, Mapping):
+        raise TypeError('PyCUTEst library options must be a mapping.')
+    known = {'variable_size', 'test_feasibility_problems'}
+    unknown = sorted(set(options) - known)
+    if unknown:
+        raise ValueError(
+            f'Unknown PyCUTEst library options: {unknown}. '
+            f'Available options: {sorted(known)}.'
+        )
+    normalized = {
+        'variable_size': options.get('variable_size', 'default'),
+        'test_feasibility_problems': options.get(
+            'test_feasibility_problems',
+            0,
+        ),
+    }
+    variable_size = normalized['variable_size']
+    if not isinstance(variable_size, str) or variable_size not in {
+        'default',
+        'min',
+        'max',
+        'all',
+    }:
+        raise ValueError(
+            "PyCUTEst option `variable_size` must be 'default', 'min', 'max', or 'all'."
+        )
+    feasibility = normalized['test_feasibility_problems']
+    if isinstance(feasibility, np.integer):
+        feasibility = int(feasibility)
+    if (
+        isinstance(feasibility, bool)
+        or not isinstance(feasibility, int)
+        or feasibility not in {0, 1, 2}
+    ):
+        raise ValueError(
+            'PyCUTEst option `test_feasibility_problems` must be 0, 1, or 2.'
+        )
+    normalized['test_feasibility_problems'] = feasibility
+    return normalized
+
+
+def pycutest_select(options, library_options=None):
     """
     Select problems from PyCUTEst that satisfy given criteria.
 
@@ -249,6 +413,10 @@ def pycutest_select(options):
           nonlinear constraints. Default is ``inf``.
         - **excludelist** (*list of str*) -- List of problem names to
           exclude. Default is ``[]``.
+    library_options : dict, optional
+        PyCUTEst-specific options. Supported keys are ``variable_size`` and
+        ``test_feasibility_problems``. If omitted, package configuration and
+        environment-level defaults are used.
 
     Returns
     -------
@@ -266,7 +434,9 @@ def pycutest_select(options):
        `set_plib_config` or by setting environment variables
        ``PYCUTEST_VARIABLE_SIZE`` and
        ``PYCUTEST_TEST_FEASIBILITY_PROBLEMS``. Environment variables
-       take precedence over ``config.txt``.
+       take precedence over ``config.txt``. An explicit ``library_options``
+       mapping takes precedence over both and is used by
+       ``benchmark(..., plib_options=...)``.
 
     See Also
     --------
@@ -282,32 +452,11 @@ def pycutest_select(options):
 
         names = pycutest_select({'ptype': 'u', 'maxdim': 5})
     """
-    # Read config: environment variables (set via set_plib_config) take
-    # precedence over the values in config.txt.
-    variable_size = 'default'
-    test_feasibility_problems = 0
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(current_dir, 'config.txt')
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r') as f:
-                for line in f:
-                    stripped = line.strip()
-                    if stripped.startswith('variable_size='):
-                        variable_size = stripped.split('=')[1].split('#')[0].split('%')[0].strip()
-                    elif stripped.startswith('test_feasibility_problems='):
-                        test_feasibility_problems = int(stripped.split('=')[1].split('#')[0].split('%')[0].strip())
-        except Exception:
-            pass
-    if 'PYCUTEST_VARIABLE_SIZE' in os.environ:
-        variable_size = os.environ['PYCUTEST_VARIABLE_SIZE']
-    if 'PYCUTEST_TEST_FEASIBILITY_PROBLEMS' in os.environ:
-        test_feasibility_problems = int(os.environ['PYCUTEST_TEST_FEASIBILITY_PROBLEMS'])
-    
-    if variable_size not in ['default', 'min', 'max', 'all']:
-        raise ValueError("Invalid `variable_size` in the file `config.txt`. Please set it to 'default', 'min', 'max', or 'all'.")
-    if test_feasibility_problems not in [0, 1, 2]:
-        raise ValueError("Invalid `test_feasibility_problems` in the file `config.txt`. Please set it to 0, 1, or 2.")
+    if library_options is None:
+        library_options = pycutest_get_default_options()
+    library_options = pycutest_validate_options(dict(library_options))
+    variable_size = library_options['variable_size']
+    test_feasibility_problems = library_options['test_feasibility_problems']
     
     # Initialize result lists
     problem_names = []
@@ -520,6 +669,8 @@ def pycutest_get_sif_params(problem_name):
     if params:
         return pycutest_get_sif_params(problem_name)
 
+    pycutest = _get_pycutest()
+
     # Capture the printed output of pycutest.print_available_sif_params
     buf = io.StringIO()
     sys_stdout = sys.stdout
@@ -610,6 +761,7 @@ def pycutest_get_sif_params(problem_name):
     return filtered_names, filtered_values, filtered_defaults
 
 def pycutest_clear_cache(problem_name, **kwargs):
+    pycutest = _get_pycutest()
     problem_name, params = _parse_problem_name(problem_name)
     if params:
         pycutest_clear_cache(problem_name, **params)
@@ -618,6 +770,7 @@ def pycutest_clear_cache(problem_name, **kwargs):
 
 def pycutest_clear_all_cache():
     # Delete the folder 'pycutest_cache_holder' directly.
+    cache_dir = _configure_pycutest_cache()
     cache_holder_path = os.path.join(cache_dir, 'pycutest_cache_holder')
     if os.path.exists(cache_holder_path):
         shutil.rmtree(cache_holder_path)
