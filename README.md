@@ -37,14 +37,22 @@ python -m pip install -e /path/to/optiprofiler
 python -m pip install -e . --no-deps --no-build-isolation
 ```
 
-After the plugin is released, its optional package extra will record the pure
-Python runtime dependency. CUTEst itself will still require the usual external
-setup. For now, install and configure PyCUTEst/CUTEst separately following the
-upstream instructions.
+This distribution intentionally installs only the OptiProfiler adapter. It does
+not install or configure PyCUTEst, CUTEst, or MASTSIF. Users who want to run
+PyCUTEst problems must prepare that runtime independently by following the
+[upstream PyCUTEst installation instructions](https://jfowkes.github.io/pycutest/_build/html/install.html).
+OptiProfiler checks runtime availability only when the `pycutest` library is
+selected; installing and discovering the adapter remain lightweight.
+
+To remove only this adapter and its OptiProfiler entry point, run:
 
 ```bash
-python -m pip install pycutest
+python -m pip uninstall optiprofiler-pycutest
 ```
+
+This does not remove or reconfigure PyCUTEst, CUTEst, MASTSIF, compiled CUTEst
+problems, or user caches. Those external runtime components remain under their
+own installation and cleanup procedures.
 
 ## Configuration
 

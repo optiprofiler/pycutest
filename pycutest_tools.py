@@ -54,9 +54,10 @@ def pycutest_check_available():
         _get_pycutest()
     except Exception as exc:
         raise RuntimeError(
-            'PyCUTEst/CUTEst is unavailable. Install the optional runtime '
-            'dependencies and configure CUTEst before selecting the '
-            '`pycutest` problem library.'
+            'PyCUTEst/CUTEst is unavailable. Prepare PyCUTEst, CUTEst, and '
+            'MASTSIF independently by following the upstream PyCUTEst '
+            'installation instructions before selecting the `pycutest` '
+            'problem library.'
         ) from exc
 
 

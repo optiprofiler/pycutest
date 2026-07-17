@@ -31,7 +31,6 @@ dependencies = [
 version = "0.1.0"
 
 [project.optional-dependencies]
-runtime = ["pycutest>=1.6.1"]
 tests = ["pycutest>=1.6.1"]
 
 [project.entry-points."optiprofiler.problem_libraries"]

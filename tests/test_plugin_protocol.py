@@ -41,6 +41,12 @@ class PyCUTEstPluginProtocolTests(unittest.TestCase):
             "optiprofiler_pycutest:get_problem_library",
         )
 
+    def test_distribution_does_not_offer_runtime_installation_extra(self):
+        distribution = metadata.distribution("optiprofiler-pycutest")
+        extras = set(distribution.metadata.get_all("Provides-Extra") or ())
+        self.assertNotIn("runtime", extras)
+        self.assertIn("tests", extras)
+
     def test_factory_returns_api_v1_plugin_without_importing_pycutest_runtime(self):
         from optiprofiler_pycutest import pycutest_tools
 
@@ -73,7 +79,7 @@ class PyCUTEstPluginProtocolTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(
                     RuntimeError,
-                    "PyCUTEst/CUTEst is unavailable",
+                    "upstream PyCUTEst installation instructions",
                 ):
                     pycutest_tools.pycutest_check_available()
         finally:
