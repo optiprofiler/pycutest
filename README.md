@@ -54,6 +54,39 @@ This does not remove or reconfigure PyCUTEst, CUTEst, MASTSIF, compiled CUTEst
 problems, or user caches. Those external runtime components remain under their
 own installation and cleanup procedures.
 
+## Discover, Update, and Remove
+
+Discovery reads the installed entry-point metadata without importing the
+upstream PyCUTEst runtime:
+
+```python
+from optiprofiler import list_problem_libraries
+
+assert "pycutest" in list_problem_libraries()
+```
+
+Select the adapter with `benchmark(..., plibs=["pycutest"])`; an installed
+plugin needs no filesystem path.
+
+For an unpublished development checkout, update the compatible feature branch
+and reinstall the adapter explicitly:
+
+```bash
+git pull --ff-only
+python -m pip install -e . --no-deps --no-build-isolation
+```
+
+The OptiProfiler core repository records the tested adapter commit in
+`problem_libraries.lock`. Do not assume that an arbitrary newer adapter commit
+is compatible with an older core checkout.
+
+Running `python -m pip uninstall optiprofiler` does not uninstall this adapter
+or its upstream runtime. The adapter remains installed but cannot be used until
+a compatible OptiProfiler core is installed again. Running
+`python -m pip uninstall optiprofiler-pycutest` removes only this adapter and
+its entry point; the independently managed runtime and caches are preserved as
+described above.
+
 ## Configuration
 
 The file `config.txt` in this directory controls how `pycutest_select` filters problems (e.g., `variable_size` and `test_feasibility_problems`). See the comments in `config.txt` for a full description of each option.
