@@ -150,7 +150,16 @@ python -m unittest discover -s tests -p 'test_*.py'
 
 ## Maintenance
 
-The `Collect Problem Info` workflow regenerates the metadata used by `pycutest_select`. It is heavier than the smoke CI because it installs CUTEst/PyCUTEst and scans the problem list in blocks.
+The manual `Collect Problem Info` workflow regenerates the metadata used by
+`pycutest_select`. It is heavier than the smoke CI because it installs the
+stable compatibility baseline from
+`.github/actions/collect_info/runtime-versions.env` and scans the problem list
+in blocks. It uploads artifacts and does not update the adapter automatically.
+
+`Check Runtime Upstream` compares that baseline with the latest PyCUTEst,
+CUTEst, SIFDecode, ARCHDefs, and MASTSIF tags. A newer tag creates or updates an
+`upstream-update` issue, but the adapter neither installs it for users nor
+changes the CI baseline without maintainer review.
 
 ## Provenance and License
 

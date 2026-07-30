@@ -1,0 +1,120 @@
+name: Check Runtime Upstream
+
+on:
+  schedule:
+    # 07:35 Beijing time, after the daily stable-runtime CI.
+    - cron: "35 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare stable runtime versions with latest upstream tags
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .github/actions/collect_info/runtime-versions.env
+          report=upstream-update-report.md
+
+          latest_tag() {
+            git ls-remote --tags --refs "$1" \
+              | awk '{sub("refs/tags/", "", $2); print $2}' \
+              | sort -V \
+              | tail -n 1
+          }
+
+          latest_pycutest="$(latest_tag https://github.com/jfowkes/pycutest.git)"
+          latest_archdefs="$(latest_tag https://github.com/ralna/ARCHDefs.git)"
+          latest_sifdecode="$(latest_tag https://github.com/ralna/SIFDecode.git)"
+          latest_cutest="$(latest_tag https://github.com/ralna/CUTEst.git)"
+          latest_mastsif="$(latest_tag https://bitbucket.org/optrove/sif.git)"
+
+          {
+            echo "# PyCUTEst runtime upstream report"
+            echo
+            echo "| Component | Stable CI baseline | Latest upstream tag |"
+            echo "| --- | --- | --- |"
+            echo "| PyCUTEst | v${PYCUTEST_VERSION} | ${latest_pycutest} |"
+            echo "| ARCHDefs | ${ARCHDEFS_VERSION} | ${latest_archdefs} |"
+            echo "| SIFDecode | ${SIFDECODE_VERSION} | ${latest_sifdecode} |"
+            echo "| CUTEst | ${CUTEST_VERSION} | ${latest_cutest} |"
+            echo "| MASTSIF | ${MASTSIF_VERSION} | ${latest_mastsif} |"
+            echo
+          } > "$report"
+
+          changed=false
+          [ "v${PYCUTEST_VERSION}" = "$latest_pycutest" ] || changed=true
+          [ "$ARCHDEFS_VERSION" = "$latest_archdefs" ] || changed=true
+          [ "$SIFDECODE_VERSION" = "$latest_sifdecode" ] || changed=true
+          [ "$CUTEST_VERSION" = "$latest_cutest" ] || changed=true
+          [ "$MASTSIF_VERSION" = "$latest_mastsif" ] || changed=true
+
+          if [ "$changed" = true ]; then
+            echo "One or more newer upstream tags require compatibility review. Nothing was installed or promoted." >> "$report"
+          else
+            echo "The stable CI baseline matches the latest upstream tags." >> "$report"
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Upload version report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pycutest-runtime-upstream-report
+          path: upstream-update-report.md
+
+      - name: Create or update the upstream notification
+        uses: actions/github-script@v7
+        env:
+          UPDATE_AVAILABLE: ${{ steps.audit.outputs.changed }}
+        with:
+          script: |
+            const fs = require("fs");
+            const title = "Upstream runtime update available: PyCUTEst/CUTEst";
+            const marker = "<!-- optiprofiler-upstream-update:pycutest-runtime -->";
+            const report = fs.readFileSync("upstream-update-report.md", "utf8");
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", per_page: 100
+            });
+            const existing = issues.find(
+              issue => !issue.pull_request && issue.title === title && issue.body?.includes(marker)
+            );
+
+            if (process.env.UPDATE_AVAILABLE === "true") {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: "upstream-update" });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                await github.rest.issues.createLabel({
+                  owner, repo, name: "upstream-update", color: "FBCA04",
+                  description: "A newer upstream snapshot requires maintainer review"
+                });
+              }
+              const body = `${marker}\n${report}\n\nThe adapter does not install or upgrade user runtimes. Review compatibility before changing the CI baseline.`;
+              if (existing) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: existing.number, body, labels: ["upstream-update"]
+                });
+              } else {
+                await github.rest.issues.create({
+                  owner, repo, title, body, labels: ["upstream-update"]
+                });
+              }
+            } else if (existing) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.number,
+                body: "The stable CI baseline now matches the latest upstream tags. Closing this notification."
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: existing.number, state: "closed"
+              });
+            }

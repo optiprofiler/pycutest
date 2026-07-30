@@ -4,7 +4,8 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: "43 2 * * *"
+    # 07:00 Beijing time.
+    - cron: "0 23 * * *"
   workflow_dispatch:
 
 permissions:
@@ -71,7 +72,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install build
           python -m pip install -e optiprofiler
-          python -m pip install pycutest
           python -m pip install -e . --no-deps --no-build-isolation
 
       - name: Build wheel and source distribution
