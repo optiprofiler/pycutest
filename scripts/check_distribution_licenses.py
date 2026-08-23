@@ -71,6 +71,7 @@ def main():
         [
             f"{PACKAGE_PREFIX}LICENSE",
             f"{PACKAGE_PREFIX}THIRD_PARTY_NOTICES.md",
+            f"{PACKAGE_PREFIX}sif_defaults_pycutest.json",
         ],
     )
     license_text = metadata.get("License", "")
@@ -85,7 +86,10 @@ def main():
 
     with tarfile.open(sdist, "r:gz") as archive:
         sdist_names = archive.getnames()
-    _require_suffixes(sdist_names, ["/LICENSE", "/THIRD_PARTY_NOTICES.md"])
+    _require_suffixes(
+        sdist_names,
+        ["/LICENSE", "/THIRD_PARTY_NOTICES.md", "/sif_defaults_pycutest.json"],
+    )
     _reject_upstream_payload(sdist_names, "Sdist")
 
 

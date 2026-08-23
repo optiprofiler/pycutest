@@ -90,6 +90,57 @@ class PyCUTEstAdapterTests(unittest.TestCase):
         self.assertIn("ROSENBR", selected)
         self.assert_problem_contract("ROSENBR")
 
+    def test_selected_variable_default_has_the_selected_dimension(self):
+        selected = pycutest_select(
+            {"ptype": "u", "mindim": 8, "maxdim": 10},
+            {
+                "variable_size": "default",
+                "test_feasibility_problems": 0,
+            },
+        )
+        self.assertIn("OSCIPATH", selected)
+
+        problem = pycutest_load("OSCIPATH")
+        self.assertEqual(problem.n, 10)
+
+    def test_all_variable_metadata_matches_reviewed_sif_parameters(self):
+        import ast
+        import csv
+        import re
+
+        from pycutest_tools import (
+            _load_reviewed_sif_defaults,
+            pycutest_get_sif_params,
+        )
+
+        metadata_path = REPO_DIR / "probinfo_pycutest.csv"
+        with metadata_path.open(newline="") as metadata_file:
+            rows = list(csv.DictReader(metadata_file))
+
+        variable_rows = [row for row in rows if row["argins"]]
+        self.assertEqual(len(variable_rows), 341)
+        for row in variable_rows:
+            with self.subTest(problem=row["problem_name"]):
+                names, values, defaults = pycutest_get_sif_params(
+                    row["problem_name"]
+                )
+                default_params = _load_reviewed_sif_defaults()["problems"][
+                    row["problem_name"]
+                ]
+                self.assertEqual(names, list(default_params))
+                self.assertEqual(defaults, list(default_params.values()))
+
+                configurations = [
+                    ast.literal_eval(group)
+                    for group in re.findall(r"\{[^}]+\}", row["argins"])
+                ]
+                dims = row["dims"].split()
+                self.assertEqual(len(configurations), len(dims))
+                for configuration in configurations:
+                    self.assertEqual(list(configuration), names)
+                    for name, value in configuration.items():
+                        self.assertIn(value, values[names.index(name)])
+
     def test_daily_random_small_problem_sample(self):
         seed = int(os.environ.get("OP_RANDOM_SEED", date.today().strftime("%Y%m%d")))
         candidates = pycutest_select(

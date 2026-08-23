@@ -53,4 +53,5 @@ optiprofiler_pycutest = [
     "THIRD_PARTY_NOTICES.md",
     "config.txt",
     "probinfo_pycutest.csv",
+    "sif_defaults_pycutest.json",
 ]

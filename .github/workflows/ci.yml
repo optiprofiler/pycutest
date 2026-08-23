@@ -74,6 +74,9 @@ jobs:
           python -m pip install -e optiprofiler
           python -m pip install -e . --no-deps --no-build-isolation
 
+      - name: Verify variable-size SIF metadata against the pinned runtime
+        run: python scripts/collect_sif_defaults.py --check
+
       - name: Build wheel and source distribution
         run: python -m build
 

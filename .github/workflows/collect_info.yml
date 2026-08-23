@@ -80,6 +80,10 @@ jobs:
           export PATH=$HOME/cutest/sifdecode/bin:$HOME/cutest/cutest/bin:$PATH
           python .github/actions/collect_info/p_getInfo.py --block ${{ matrix.block }}
 
+      - name: Collect reviewed SIF defaults
+        if: matrix.block == 0
+        run: python scripts/collect_sif_defaults.py --output sif_defaults_pycutest.json
+
       - name: Upload block results
         uses: actions/upload-artifact@v4
         with:
@@ -89,6 +93,7 @@ jobs:
             failed_problems_pycutest_block${{ matrix.block }}.txt
             feasibility_pycutest_block${{ matrix.block }}.txt
             timeout_problems_pycutest_block${{ matrix.block }}.txt
+            sif_defaults_pycutest.json
           retention-days: 1
           if-no-files-found: ignore
 
@@ -126,6 +131,7 @@ jobs:
           name: probinfo-files-pycutest
           path: |
             probinfo_pycutest.csv
+            sif_defaults_pycutest.json
             failed_problems_pycutest.txt
             feasibility_pycutest.txt
             timeout_problems_pycutest.txt

@@ -1,6 +1,7 @@
-import sys, os, io, re, importlib, shutil
+import ast, csv, json, sys, os, io, re, importlib, shutil
 from collections.abc import Mapping
 from contextlib import redirect_stdout
+from functools import lru_cache
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -13,6 +14,152 @@ _PYCUTEST_CACHE_DIR = None
 
 # Import Problem class from optiprofiler
 from optiprofiler.opclasses import Problem
+
+
+@lru_cache(maxsize=1)
+def _load_reviewed_sif_defaults():
+    """Return the reviewed default SIF parameters and runtime matrix."""
+    metadata_path = Path(__file__).with_name('sif_defaults_pycutest.json')
+    with metadata_path.open(encoding='utf-8') as metadata_file:
+        metadata = json.load(metadata_file)
+    if metadata.get('schema_version') != 1:
+        raise RuntimeError(
+            f'Unsupported PyCUTEst SIF-default metadata schema in {metadata_path}.'
+        )
+    problems = metadata.get('problems')
+    if not isinstance(problems, dict):
+        raise RuntimeError(
+            f'Invalid PyCUTEst SIF-default metadata in {metadata_path}.'
+        )
+    return metadata
+
+
+@lru_cache(maxsize=1)
+def _load_problem_metadata():
+    metadata_path = Path(__file__).with_name('probinfo_pycutest.csv')
+    with metadata_path.open(newline='', encoding='utf-8') as metadata_file:
+        rows = list(csv.DictReader(metadata_file))
+    return {row['problem_name']: row for row in rows}
+
+
+def _parse_parameter_configurations(value):
+    if not value:
+        return []
+    return [
+        ast.literal_eval(group)
+        for group in re.findall(r'\{[^}]+\}', value)
+    ]
+
+
+def _metadata_numbers(value):
+    if not value:
+        return []
+    numbers = []
+    for item in value.split():
+        number = float(item)
+        numbers.append(int(number) if number.is_integer() else number)
+    return numbers
+
+
+def _same_parameters(left, right):
+    return set(left) == set(right) and all(left[key] == right[key] for key in left)
+
+
+def _expected_instance_metadata(base_name, params):
+    row = _load_problem_metadata().get(base_name)
+    if row is None:
+        return None
+
+    defaults = _load_reviewed_sif_defaults()['problems'].get(base_name)
+    if defaults is not None and _same_parameters(defaults, params):
+        columns = {
+            'dim': 'dim',
+            'mb': 'mb',
+            'mlcon': 'mlcon',
+            'mnlcon': 'mnlcon',
+            'mcon': 'mcon',
+        }
+        return {
+            key: _metadata_numbers(row[column])[0]
+            for key, column in columns.items()
+        }
+
+    configurations = _parse_parameter_configurations(row.get('argins', ''))
+    matching = [
+        index
+        for index, configuration in enumerate(configurations)
+        if _same_parameters(configuration, params)
+    ]
+    if len(matching) != 1:
+        return None
+
+    index = matching[0]
+    columns = {
+        'dim': 'dims',
+        'mb': 'mbs',
+        'mlcon': 'mlcons',
+        'mnlcon': 'mnlcons',
+        'mcon': 'mcons',
+    }
+    expected = {}
+    for key, column in columns.items():
+        values = _metadata_numbers(row.get(column, ''))
+        if index >= len(values):
+            return None
+        expected[key] = values[index]
+    return expected
+
+
+def _resolve_problem_instance(problem_name, explicit_params):
+    """Resolve one stable problem identity to base name, SIF params, and metadata."""
+    base_name, encoded_params = _parse_problem_name(problem_name)
+    explicit_params = dict(explicit_params)
+    if encoded_params:
+        conflicts = {
+            key
+            for key in set(encoded_params) & set(explicit_params)
+            if encoded_params[key] != explicit_params[key]
+        }
+        if conflicts:
+            raise ValueError(
+                f'Conflicting SIF parameters for {problem_name}: {sorted(conflicts)}.'
+            )
+        params = dict(encoded_params)
+        params.update(explicit_params)
+    elif explicit_params:
+        params = explicit_params
+    else:
+        defaults = _load_reviewed_sif_defaults()['problems'].get(base_name)
+        params = dict(defaults) if defaults is not None else {}
+    return base_name, params, _expected_instance_metadata(base_name, params)
+
+
+def _assert_loaded_instance(problem_name, problem, expected):
+    """Fail loudly when an installed CUTEst runtime drifts from selected metadata."""
+    if expected is None:
+        return
+    attributes = {
+        'dim': 'n',
+        'mb': 'mb',
+        'mlcon': 'mlcon',
+        'mnlcon': 'mnlcon',
+        'mcon': 'mcon',
+    }
+    mismatches = []
+    for label, attribute in attributes.items():
+        actual = getattr(problem, attribute)
+        if actual != expected[label]:
+            mismatches.append(
+                f'expected {label}={expected[label]}, loaded {label}={actual}'
+            )
+    if mismatches:
+        raise RuntimeError(
+            f"PyCUTEst instance metadata mismatch for '{problem_name}': "
+            + '; '.join(mismatches)
+            + '. The installed PyCUTEst/CUTEst/MASTSIF runtime does not match '
+              'the reviewed adapter metadata; use the tested runtime matrix or '
+              'review and promote an upstream update.'
+        )
 
 
 def _get_pycutest():
@@ -126,19 +273,20 @@ def pycutest_load(problem_name, library_options=None, **kwargs):
     if library_options is not None:
         pycutest_validate_options(library_options)
 
-    # Check if 'problem_name' has the pattern '_{paramname}_{paramvalue}'. If it has, we load the problem with the specified SIF parameters.
-    problem_name, params = _parse_problem_name(problem_name)
-    if params:
-        return pycutest_load(
-            problem_name,
-            library_options=library_options,
-            **params,
-        )
+    requested_name = problem_name
+    problem_name, params, expected = _resolve_problem_instance(
+        requested_name,
+        kwargs,
+    )
 
     pycutest = _get_pycutest()
 
     # Initialize CUTEst problem
-    p = pycutest.import_problem(problem_name, destination=problem_name, sifParams=kwargs)
+    p = pycutest.import_problem(
+        problem_name,
+        destination=problem_name,
+        sifParams=params or None,
+    )
 
     fun = lambda x: p.obj(x)
     grad = lambda x: p.grad(x)
@@ -274,7 +422,8 @@ def pycutest_load(problem_name, library_options=None, **kwargs):
     def hcub(x):
         return _process_nonlinear_ineq(x, "hessian")
 
-    problem = Problem(fun, x0, name=problem_name, xl=xl, xu=xu, aub=aub, bub=bub, aeq=aeq, beq=beq, cub=cub, ceq=ceq, grad=grad, hess=hess, jcub=jcub, jceq=jceq, hcub=hcub, hceq=hceq)
+    problem = Problem(fun, x0, name=requested_name, xl=xl, xu=xu, aub=aub, bub=bub, aeq=aeq, beq=beq, cub=cub, ceq=ceq, grad=grad, hess=hess, jcub=jcub, jceq=jceq, hcub=hcub, hceq=hceq)
+    _assert_loaded_instance(requested_name, problem, expected)
 
     return problem
 
@@ -763,11 +912,8 @@ def pycutest_get_sif_params(problem_name):
 
 def pycutest_clear_cache(problem_name, **kwargs):
     pycutest = _get_pycutest()
-    problem_name, params = _parse_problem_name(problem_name)
-    if params:
-        pycutest_clear_cache(problem_name, **params)
-    else:
-        pycutest.clear_cache(problem_name, sifParams=kwargs)
+    problem_name, params, _ = _resolve_problem_instance(problem_name, kwargs)
+    pycutest.clear_cache(problem_name, sifParams=params or None)
 
 def pycutest_clear_all_cache():
     # Delete the folder 'pycutest_cache_holder' directly.

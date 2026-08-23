@@ -132,6 +132,22 @@ Inspecting these options does not import PyCUTEst or require a working CUTEst
 installation. Runtime availability is checked only when this library is
 selected for a benchmark.
 
+### Stable variable-size instances
+
+PyCUTEst and MASTSIF are external runtimes, and an upstream SIF file can change
+which parameter values are active by default. The adapter therefore records
+the reviewed default SIF parameters for every variable-size problem in
+`sif_defaults_pycutest.json`. Loading a bare variable-size name applies those
+parameters explicitly; loading an encoded name such as
+`OSCIPATH_N_25_RHO_1` applies the parameters encoded in that identity.
+
+After loading a reviewed instance, the adapter checks its dimension and its
+bound, linear-constraint, nonlinear-constraint, and total-constraint counts
+against `probinfo_pycutest.csv`. A mismatch fails with a runtime/metadata-drift
+error instead of benchmarking a different instance from the one selected.
+Explicit custom SIF parameter mappings remain supported, but configurations
+not present in the reviewed metadata do not claim a recorded shape.
+
 ## Testing
 
 The `CI` workflow runs daily and on pushes on Linux. It installs CUTEst/PyCUTEst, checks the OptiProfiler adapter layer, and keeps the sample intentionally small:
@@ -139,6 +155,10 @@ The `CI` workflow runs daily and on pushes on Linux. It installs CUTEst/PyCUTEst
 - load `ROSENBR` through `pycutest_load` and evaluate `fun`, `cub`, and `ceq`;
 - select small problems through `pycutest_select`;
 - check `variable_size` and `test_feasibility_problems` environment overrides;
+- audit all 341 variable-size SIF parameter definitions and all 2,588 recorded
+  nondefault configurations against the committed metadata;
+- verify that `OSCIPATH` selected in the dimension range 8--10 loads the
+  reviewed 10-dimensional instance by passing its SIF parameters explicitly;
 - check the installed entry-point factory without importing PyCUTEst;
 - sample a few additional small problems each day with at most two numerical-library threads.
 
@@ -154,12 +174,39 @@ The manual `Collect Problem Info` workflow regenerates the metadata used by
 `pycutest_select`. It is heavier than the smoke CI because it installs the
 stable compatibility baseline from
 `.github/actions/collect_info/runtime-versions.env` and scans the problem list
-in blocks. It uploads artifacts and does not update the adapter automatically.
+in blocks. Its artifact includes both `probinfo_pycutest.csv` and the reviewed
+`sif_defaults_pycutest.json`; it does not update the adapter automatically.
+Maintainers can verify the committed defaults against an installed copy of the
+pinned runtime with:
+
+```bash
+python scripts/collect_sif_defaults.py --check
+```
 
 `Check Runtime Upstream` compares that baseline with the latest PyCUTEst,
 CUTEst, SIFDecode, ARCHDefs, and MASTSIF tags. A newer tag creates or updates an
 `upstream-update` issue, but the adapter neither installs it for users nor
 changes the CI baseline without maintainer review.
+
+The currently reviewed runtime matrix is:
+
+| Component | Version | Commit |
+| --- | --- | --- |
+| PyCUTEst | 1.8.2 | `65fb333f6886386cd38eb0ecdfaff9f536e931de` |
+| ARCHDefs | v2.2.3 | `d1bf9f0225a97981aac1b6fddb85c07d8e9676a4` |
+| SIFDecode | v2.1.3 | `c0e654b76d925cb59accc03c75f65e6ac6654e32` |
+| CUTEst | v2.0.42 | `00999c3e215a4dffd57f5a888fc4c4ada2567940` |
+| MASTSIF | v0.5 | `04280876fc4c7cae9a06ab34e0d5887bee4d8960` |
+
+The same matrix is machine-readable in
+`.github/actions/collect_info/runtime-versions.env` and
+`sif_defaults_pycutest.json`. Upstream notifications are review inputs, not
+automatic deployment instructions.
+
+Before promoting a newer runtime matrix, maintainers must also run the adapter
+regression suite against that candidate runtime. This catches upstream changes
+such as a different bare SIF default without changing the reviewed instance
+used by `pycutest_select` and `pycutest_load`.
 
 ## Provenance and License
 

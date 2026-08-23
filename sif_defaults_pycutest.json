@@ -1,0 +1,1111 @@
+{
+  "schema_version": 1,
+  "runtime_matrix": {
+    "pycutest": {
+      "version": "1.8.2",
+      "commit": "65fb333f6886386cd38eb0ecdfaff9f536e931de"
+    },
+    "archdefs": {
+      "version": "v2.2.3",
+      "commit": "d1bf9f0225a97981aac1b6fddb85c07d8e9676a4"
+    },
+    "sifdecode": {
+      "version": "v2.1.3",
+      "commit": "c0e654b76d925cb59accc03c75f65e6ac6654e32"
+    },
+    "cutest": {
+      "version": "v2.0.42",
+      "commit": "00999c3e215a4dffd57f5a888fc4c4ada2567940"
+    },
+    "mastsif": {
+      "version": "v0.5",
+      "commit": "04280876fc4c7cae9a06ab34e0d5887bee4d8960"
+    }
+  },
+  "problems": {
+    "ALJAZZAF": {
+      "N": 1000,
+      "N1": 500
+    },
+    "ARGLCLE": {
+      "N": 200,
+      "M": 400
+    },
+    "ARGLINA": {
+      "N": 200,
+      "M": 400
+    },
+    "ARGLINB": {
+      "N": 200,
+      "M": 400
+    },
+    "ARGLINC": {
+      "N": 200,
+      "M": 400
+    },
+    "ARGTRIGLS": {
+      "N": 200
+    },
+    "ARWHDNE": {
+      "N": 500
+    },
+    "ARWHEAD": {
+      "N": 5000
+    },
+    "BDEXP": {
+      "N": 5000
+    },
+    "BDQRTIC": {
+      "N": 5000
+    },
+    "BDVALUE": {
+      "NDP": 5002
+    },
+    "BIGGSB1": {
+      "N": 5000
+    },
+    "BLOCKQP4": {
+      "N": 5000,
+      "B": 10
+    },
+    "BLOCKQP5": {
+      "N": 5000,
+      "B": 10
+    },
+    "BLOWEYA": {
+      "N": 2000
+    },
+    "BLOWEYB": {
+      "N": 2000
+    },
+    "BLOWEYC": {
+      "N": 2000
+    },
+    "BOX": {
+      "N": 10000
+    },
+    "BOXPOWER": {
+      "N": 20000
+    },
+    "BRATU1D": {
+      "N": 5001
+    },
+    "BROWNAL": {
+      "N": 200
+    },
+    "BROWNALE": {
+      "N": 200
+    },
+    "BROYDN3DLS": {
+      "N": 5000
+    },
+    "BROYDN7D": {
+      "N/2": 2500
+    },
+    "BROYDNBD": {
+      "N": 5000
+    },
+    "BROYDNBDLS": {
+      "N": 5000
+    },
+    "BRYBND": {
+      "N": 5000
+    },
+    "CAMSHAPE": {
+      "N": 800
+    },
+    "CAR2": {
+      "M": 1000
+    },
+    "CATENA": {
+      "N+1": 1000
+    },
+    "CATENARY": {
+      "N+1": 1000
+    },
+    "CATMIX": {
+      "NH": 800
+    },
+    "CHAIN": {
+      "NH": 400
+    },
+    "CHAINWOO": {
+      "NS": 1999
+    },
+    "CHANDHEU": {
+      "N": 500
+    },
+    "CHANNEL": {
+      "NH": 400,
+      "NC": 4
+    },
+    "CHEBYQAD": {
+      "N": 100
+    },
+    "CHEMRCTB": {
+      "N": 5000
+    },
+    "CHENHARK": {
+      "N": 5000,
+      "NFREE": 2500,
+      "NDEGEN": 500
+    },
+    "CHNROSNB": {
+      "N": 50
+    },
+    "CHNRSBNE": {
+      "N": 50
+    },
+    "CHNRSNBM": {
+      "N": 50
+    },
+    "CLNLBEAM": {
+      "NI": 2000
+    },
+    "CLPLATEA": {
+      "P": 71
+    },
+    "CLPLATEB": {
+      "P": 71
+    },
+    "CLPLATEC": {
+      "P": 71
+    },
+    "CORKSCRW": {
+      "T": 500
+    },
+    "COSHFUN": {
+      "M": 2000
+    },
+    "COSINE": {
+      "N": 10000
+    },
+    "CRAGGLVY": {
+      "M": 2499
+    },
+    "CURLY10": {
+      "N": 10000
+    },
+    "CURLY20": {
+      "N": 10000
+    },
+    "CURLY30": {
+      "N": 10000
+    },
+    "CVXBQP1": {
+      "N": 10000
+    },
+    "CVXQP1": {
+      "N": 10000
+    },
+    "CVXQP2": {
+      "N": 10000
+    },
+    "CVXQP3": {
+      "N": 10000
+    },
+    "DEGENQP": {
+      "N": 50
+    },
+    "DEGENQPC": {
+      "N": 50
+    },
+    "DITTERT": {
+      "N": 10
+    },
+    "DIXCHLNV": {
+      "N": 1000
+    },
+    "DIXMAANA": {
+      "M": 1000
+    },
+    "DIXMAANB": {
+      "M": 1000
+    },
+    "DIXMAANC": {
+      "M": 1000
+    },
+    "DIXMAAND": {
+      "M": 1000
+    },
+    "DIXMAANE": {
+      "M": 1000
+    },
+    "DIXMAANF": {
+      "M": 1000
+    },
+    "DIXMAANG": {
+      "M": 1000
+    },
+    "DIXMAANH": {
+      "M": 1000
+    },
+    "DIXMAANI": {
+      "M": 1000
+    },
+    "DIXMAANJ": {
+      "M": 1000
+    },
+    "DIXMAANK": {
+      "M": 1000
+    },
+    "DIXMAANL": {
+      "M": 1000
+    },
+    "DIXMAANM": {
+      "M": 1000
+    },
+    "DIXMAANN": {
+      "M": 1000
+    },
+    "DIXMAANO": {
+      "M": 1000
+    },
+    "DIXMAANP": {
+      "M": 1000
+    },
+    "DIXON3DQ": {
+      "N": 10000
+    },
+    "DQDRTIC": {
+      "N": 5000
+    },
+    "DQRTIC": {
+      "N": 5000
+    },
+    "DRCAV1LQ": {
+      "M": 63
+    },
+    "DRCAV2LQ": {
+      "M": 63
+    },
+    "DRCAV3LQ": {
+      "M": 63
+    },
+    "DRUGDIS": {
+      "NI": 2000
+    },
+    "DRUGDISE": {
+      "NI": 100
+    },
+    "DTOC1L": {
+      "N": 1000,
+      "NX": 2,
+      "NY": 4
+    },
+    "DTOC1NA": {
+      "N": 1000,
+      "NX": 2,
+      "NY": 4
+    },
+    "DTOC1NB": {
+      "N": 1000,
+      "NX": 2,
+      "NY": 4
+    },
+    "DTOC1NC": {
+      "N": 1000,
+      "NX": 2,
+      "NY": 4
+    },
+    "DTOC1ND": {
+      "N": 1000,
+      "NX": 2,
+      "NY": 4
+    },
+    "DTOC2": {
+      "N": 1000,
+      "NX": 2,
+      "NY": 4
+    },
+    "DTOC3": {
+      "N": 1500
+    },
+    "DTOC4": {
+      "N": 1500
+    },
+    "DTOC6": {
+      "N": 5001
+    },
+    "EDENSCH": {
+      "N": 2000
+    },
+    "EG3": {
+      "N": 10000
+    },
+    "EIGENA2": {
+      "N": 50
+    },
+    "EIGENACO": {
+      "N": 50
+    },
+    "EIGENALS": {
+      "N": 50
+    },
+    "EIGENAU": {
+      "N": 50
+    },
+    "EIGENB2": {
+      "N": 50
+    },
+    "EIGENBCO": {
+      "N": 50
+    },
+    "EIGENBLS": {
+      "N": 50
+    },
+    "EIGENC": {
+      "M": 25
+    },
+    "EIGENC2": {
+      "M": 25
+    },
+    "EIGENCCO": {
+      "M": 25
+    },
+    "EIGENCLS": {
+      "M": 25
+    },
+    "EIGMAXA": {
+      "N": 100
+    },
+    "EIGMAXB": {
+      "N": 100
+    },
+    "EIGMAXC": {
+      "M": 100
+    },
+    "EIGMINA": {
+      "N": 100
+    },
+    "EIGMINB": {
+      "N": 100
+    },
+    "EIGMINC": {
+      "M": 100
+    },
+    "ELEC": {
+      "NP": 200
+    },
+    "ENGVAL1": {
+      "N": 5000
+    },
+    "ERRINROS": {
+      "N": 50
+    },
+    "ERRINRSM": {
+      "N": 50
+    },
+    "EXPLIN": {
+      "N": 1200,
+      "M": 100
+    },
+    "EXPLIN2": {
+      "N": 1200,
+      "M": 100
+    },
+    "EXPQUAD": {
+      "N": 1200,
+      "M": 100
+    },
+    "EXTROSNB": {
+      "N": 1000
+    },
+    "FERRISDC": {
+      "n": 200,
+      "k": 10
+    },
+    "FLETBV3M": {
+      "N": 5000,
+      "KAPPA": 1.0
+    },
+    "FLETCBV2": {
+      "N": 5000,
+      "KAPPA": 1.0
+    },
+    "FLETCBV3": {
+      "N": 5000,
+      "KAPPA": 1.0
+    },
+    "FLETCHBV": {
+      "N": 5000,
+      "KAPPA": 1.0
+    },
+    "FLETCHCR": {
+      "N": 1000
+    },
+    "FMINSRF2": {
+      "P": 75
+    },
+    "FMINSURF": {
+      "P": 75
+    },
+    "FREUROTH": {
+      "N": 5000
+    },
+    "GASOIL": {
+      "NH": 400
+    },
+    "GENHUMPS": {
+      "N": 5000,
+      "ZETA": 20.0
+    },
+    "GENROSE": {
+      "N": 500
+    },
+    "GILBERT": {
+      "N": 5000
+    },
+    "GLIDER": {
+      "NH": 400
+    },
+    "GPP": {
+      "N": 1000
+    },
+    "GRIDGENA": {
+      "NDELTA": 7
+    },
+    "GRIDNETA": {
+      "L": 30
+    },
+    "GRIDNETB": {
+      "L": 30
+    },
+    "GRIDNETC": {
+      "L": 30
+    },
+    "GRIDNETD": {
+      "L": 30
+    },
+    "GRIDNETE": {
+      "L": 30
+    },
+    "GRIDNETF": {
+      "L": 30
+    },
+    "GRIDNETG": {
+      "L": 30
+    },
+    "GRIDNETH": {
+      "L": 30
+    },
+    "GRIDNETI": {
+      "L": 30
+    },
+    "HADAMALS": {
+      "N": 20
+    },
+    "HADAMARD": {
+      "N": 20
+    },
+    "HAGER1": {
+      "N": 2500
+    },
+    "HAGER2": {
+      "N": 2500
+    },
+    "HAGER3": {
+      "N": 2500
+    },
+    "HAGER4": {
+      "N": 2500
+    },
+    "HANGING": {
+      "NX": 40,
+      "NY": 30
+    },
+    "HARKERP2": {
+      "N": 1000
+    },
+    "HILBERTA": {
+      "N": 2
+    },
+    "HILBERTB": {
+      "N": 10
+    },
+    "HS110": {
+      "N": 10
+    },
+    "HUES-MOD": {
+      "K": 5000
+    },
+    "HUESTIS": {
+      "K": 5000
+    },
+    "HVYCRASH": {
+      "N": 1000
+    },
+    "INDEF": {
+      "N": 5000,
+      "ALPHA": 0.5
+    },
+    "INDEFM": {
+      "N": 100000,
+      "ALPHA": 0.5
+    },
+    "INTEQNELS": {
+      "N": 10
+    },
+    "JANNSON3": {
+      "N": 10000
+    },
+    "JANNSON4": {
+      "N": 10000
+    },
+    "JIMACK": {
+      "M": 6,
+      "N": 12
+    },
+    "JNLBRNG1": {
+      "PT": 100,
+      "PY": 100
+    },
+    "JNLBRNG2": {
+      "PT": 100,
+      "PY": 100
+    },
+    "JNLBRNGA": {
+      "PT": 100,
+      "PY": 100
+    },
+    "JNLBRNGB": {
+      "PT": 100,
+      "PY": 100
+    },
+    "KISSING": {
+      "NP": 42,
+      "MDIM": 3
+    },
+    "KISSING2": {
+      "m": 25,
+      "n": 4
+    },
+    "LCH": {
+      "N": 1000
+    },
+    "LIARWHD": {
+      "N": 5000
+    },
+    "LINVERSE": {
+      "N": 1000
+    },
+    "LMINSURF": {
+      "P": 75
+    },
+    "LUBRIF": {
+      "NN": 250
+    },
+    "LUBRIFC": {
+      "NN": 250
+    },
+    "LUKVLE1": {
+      "N": 10000
+    },
+    "LUKVLE10": {
+      "N": 10000
+    },
+    "LUKVLE13": {
+      "N": 9998
+    },
+    "LUKVLE2": {
+      "N": 10000
+    },
+    "LUKVLE3": {
+      "N": 10000
+    },
+    "LUKVLE4": {
+      "N": 10000
+    },
+    "LUKVLE5": {
+      "N": 10000
+    },
+    "LUKVLE6": {
+      "N": 9999
+    },
+    "LUKVLE7": {
+      "N": 10000
+    },
+    "LUKVLE8": {
+      "N": 10000
+    },
+    "LUKVLE9": {
+      "N": 10000
+    },
+    "LUKVLI1": {
+      "N": 10000
+    },
+    "LUKVLI10": {
+      "N": 10000
+    },
+    "LUKVLI14": {
+      "N": 9998
+    },
+    "LUKVLI15": {
+      "N": 9997
+    },
+    "LUKVLI16": {
+      "N": 9997
+    },
+    "LUKVLI17": {
+      "N": 9997
+    },
+    "LUKVLI2": {
+      "N": 10000
+    },
+    "LUKVLI3": {
+      "N": 10000
+    },
+    "LUKVLI4": {
+      "N": 10000
+    },
+    "LUKVLI5": {
+      "N": 10000
+    },
+    "LUKVLI6": {
+      "N": 9999
+    },
+    "LUKVLI7": {
+      "N": 10000
+    },
+    "LUKVLI8": {
+      "N": 10000
+    },
+    "LUKVLI9": {
+      "N": 10000
+    },
+    "MADSSCHJ": {
+      "N": 200
+    },
+    "MANCINO": {
+      "N": 100
+    },
+    "MANNE": {
+      "T": 2000
+    },
+    "MCCORMCK": {
+      "N": 5000
+    },
+    "MINC44": {
+      "N": 10
+    },
+    "MINPERM": {
+      "N": 10
+    },
+    "MODBEALE": {
+      "N/2": 10000
+    },
+    "MOREBV": {
+      "N": 5000
+    },
+    "MOREBVNE": {
+      "N": 10
+    },
+    "MOSARQP1": {
+      "N": 2500,
+      "M": 700,
+      "COND": 3.0
+    },
+    "MOSARQP2": {
+      "N": 2500,
+      "M": 700,
+      "COND": 3.0
+    },
+    "MSQRTALS": {
+      "P": 32
+    },
+    "MSQRTBLS": {
+      "P": 32
+    },
+    "NCB20": {
+      "N": 5000
+    },
+    "NCB20B": {
+      "N": 5000
+    },
+    "NCVXBQP1": {
+      "N": 10000
+    },
+    "NCVXBQP2": {
+      "N": 10000
+    },
+    "NCVXBQP3": {
+      "N": 10000
+    },
+    "NCVXQP1": {
+      "N": 10000
+    },
+    "NCVXQP2": {
+      "N": 10000
+    },
+    "NCVXQP3": {
+      "N": 10000
+    },
+    "NCVXQP4": {
+      "N": 10000
+    },
+    "NCVXQP5": {
+      "N": 10000
+    },
+    "NCVXQP6": {
+      "N": 10000
+    },
+    "NCVXQP7": {
+      "N": 10000
+    },
+    "NCVXQP8": {
+      "N": 10000
+    },
+    "NCVXQP9": {
+      "N": 10000
+    },
+    "NLMSURF": {
+      "P": 75
+    },
+    "NOBNDTOR": {
+      "Q": 37
+    },
+    "NONCVXU2": {
+      "N": 5000
+    },
+    "NONCVXUN": {
+      "N": 5000
+    },
+    "NONDIA": {
+      "N": 5000
+    },
+    "NONDQUAR": {
+      "N": 5000
+    },
+    "NONMSQRT": {
+      "P": 70
+    },
+    "NONSCOMP": {
+      "N": 5000
+    },
+    "NUFFIELD": {
+      "N": 40
+    },
+    "OBSTCLAE": {
+      "PX": 100,
+      "PY": 100
+    },
+    "OBSTCLAL": {
+      "PX": 100,
+      "PY": 100
+    },
+    "OBSTCLBL": {
+      "PX": 100,
+      "PY": 100
+    },
+    "OBSTCLBM": {
+      "PX": 100,
+      "PY": 100
+    },
+    "OBSTCLBU": {
+      "PX": 100,
+      "PY": 100
+    },
+    "ODC": {
+      "NX": 70,
+      "NY": 70
+    },
+    "ORBIT2": {
+      "M": 300
+    },
+    "ORTHRDM2": {
+      "NPTS": 4000
+    },
+    "ORTHRDS2": {
+      "NPTS": 2500
+    },
+    "ORTHREGC": {
+      "NPTS": 2500
+    },
+    "ORTHREGD": {
+      "NPTS": 2500
+    },
+    "ORTHREGE": {
+      "NPTS": 2500
+    },
+    "ORTHREGF": {
+      "NPTS": 40
+    },
+    "ORTHRGDM": {
+      "NPTS": 5000
+    },
+    "ORTHRGDS": {
+      "NPTS": 2500
+    },
+    "OSCIGRAD": {
+      "N": 100000,
+      "RHO": 500.0
+    },
+    "OSCIPATH": {
+      "N": 10,
+      "RHO": 500.0
+    },
+    "PENALTY1": {
+      "N": 1000
+    },
+    "PENALTY2": {
+      "N": 200
+    },
+    "PENALTY3": {
+      "N/2": 100
+    },
+    "PENTDI": {
+      "N": 5000
+    },
+    "POLYGON": {
+      "NV": 100
+    },
+    "POWELL20": {
+      "N": 5000
+    },
+    "POWELLBC": {
+      "P": 500
+    },
+    "POWELLSG": {
+      "N": 5000
+    },
+    "POWER": {
+      "N": 10000
+    },
+    "PROBPENL": {
+      "N": 500
+    },
+    "QR3DBD": {
+      "M": 20
+    },
+    "QR3DLS": {
+      "M": 20
+    },
+    "QRTQUAD": {
+      "N": 5000,
+      "M": 1100
+    },
+    "QUARTC": {
+      "N": 5000
+    },
+    "QUDLIN": {
+      "N": 5000,
+      "M": 2500
+    },
+    "RAYBENDL": {
+      "NKNOTS": 1024
+    },
+    "RAYBENDS": {
+      "NK": 1024
+    },
+    "READING1": {
+      "N": 2000
+    },
+    "READING2": {
+      "N": 2000
+    },
+    "READING3": {
+      "N": 2000
+    },
+    "READING4": {
+      "N": 5000
+    },
+    "READING5": {
+      "N": 5000
+    },
+    "READING9": {
+      "N+1": 5001
+    },
+    "ROBOTARM": {
+      "NH": 400
+    },
+    "ROCKET": {
+      "NH": 400
+    },
+    "ROSEPETAL": {
+      "N": 1000,
+      "R": 2.0
+    },
+    "S277-280": {
+      "N": 4
+    },
+    "S368": {
+      "N": 8
+    },
+    "SBRYBND": {
+      "N": 5000
+    },
+    "SCHMVETT": {
+      "N": 5000
+    },
+    "SCOND1LS": {
+      "N": 5000,
+      "LN": 4500
+    },
+    "SCOSINE": {
+      "N": 5000
+    },
+    "SCURLY10": {
+      "N": 10000
+    },
+    "SCURLY20": {
+      "N": 10000
+    },
+    "SCURLY30": {
+      "N": 10000
+    },
+    "SENSORS": {
+      "N": 100
+    },
+    "SINEALI": {
+      "N": 1000
+    },
+    "SINQUAD": {
+      "N": 5000
+    },
+    "SINROSNB": {
+      "N": 1000
+    },
+    "SOSQP1": {
+      "N": 2500
+    },
+    "SOSQP2": {
+      "N": 2500
+    },
+    "SPARSINE": {
+      "N": 5000
+    },
+    "SPARSQUR": {
+      "N": 10000
+    },
+    "SPECAN": {
+      "K": 3
+    },
+    "SPIN": {
+      "N": 50
+    },
+    "SPIN2": {
+      "N": 50
+    },
+    "SPIN2OP": {
+      "N": 50
+    },
+    "SPINOP": {
+      "N": 50
+    },
+    "SPMSQRT": {
+      "M": 1667
+    },
+    "SPMSRTLS": {
+      "M": 1667
+    },
+    "SREADIN3": {
+      "N": 2000
+    },
+    "SROSENBR": {
+      "N/2": 2500
+    },
+    "SSBRYBND": {
+      "N": 5000
+    },
+    "SSC": {
+      "NX": 70,
+      "NY": 70
+    },
+    "SSCOSINE": {
+      "N": 5000
+    },
+    "SSNLBEAM": {
+      "NI": 1000
+    },
+    "STEERING": {
+      "NH": 400
+    },
+    "SVANBERG": {
+      "N": 5000
+    },
+    "TESTQUAD": {
+      "N": 5000
+    },
+    "TOINTGSS": {
+      "N": 5000
+    },
+    "TORSION1": {
+      "Q": 37
+    },
+    "TORSION2": {
+      "Q": 37
+    },
+    "TORSION3": {
+      "Q": 37
+    },
+    "TORSION4": {
+      "Q": 37
+    },
+    "TORSION5": {
+      "Q": 37
+    },
+    "TORSION6": {
+      "Q": 37
+    },
+    "TORSIONA": {
+      "Q": 37
+    },
+    "TORSIONB": {
+      "Q": 37
+    },
+    "TORSIONC": {
+      "Q": 37
+    },
+    "TORSIOND": {
+      "Q": 37
+    },
+    "TORSIONE": {
+      "Q": 37
+    },
+    "TORSIONF": {
+      "Q": 37
+    },
+    "TQUARTIC": {
+      "N": 5000
+    },
+    "TRAINH": {
+      "N": 1001
+    },
+    "TRIDIA": {
+      "N": 5000
+    },
+    "UBH5": {
+      "N": 500
+    },
+    "VARDIM": {
+      "N": 200
+    },
+    "VAREIGVL": {
+      "N": 49,
+      "M": 4
+    },
+    "WATSON": {
+      "N": 12
+    },
+    "WOODS": {
+      "NS": 1000
+    },
+    "YAO": {
+      "P": 2000,
+      "k": 2
+    },
+    "YATP1LS": {
+      "N": 350
+    },
+    "YATP2LS": {
+      "N": 350
+    },
+    "ZAMB2": {
+      "NY": 30,
+      "YEAR": 1931
+    },
+    "ZIGZAG": {
+      "T": 500
+    }
+  }
+}
