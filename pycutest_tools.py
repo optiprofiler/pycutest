@@ -1,5 +1,6 @@
-import sys, os, io, re, importlib, shutil
+import ast, csv, sys, os, io, re, importlib, shutil
 from contextlib import redirect_stdout
+from functools import lru_cache
 import numpy as np
 import pandas as pd
 
@@ -17,6 +18,53 @@ import pycutest
 
 # Import Problem class from optiprofiler
 from optiprofiler.opclasses import Problem
+
+
+@lru_cache(maxsize=1)
+def _instance_metadata():
+    path = os.path.join(current_dir, 'probinfo_pycutest.csv')
+    with open(path, newline='', encoding='utf-8') as stream:
+        return {row['problem_name']: row for row in csv.DictReader(stream)}
+
+
+def _assert_loaded_instance(problem_name, params, problem):
+    """Reject drift only when the frozen CSV identifies this exact instance."""
+    row = _instance_metadata().get(problem_name)
+    if row is None:
+        return
+    columns = [('n', 'dim'), ('mb', 'mb'), ('mlcon', 'mlcon'),
+               ('mnlcon', 'mnlcon'), ('mcon', 'mcon')]
+    index = None
+    if params:
+        configurations = [ast.literal_eval(group)
+                          for group in re.findall(r'\{[^}]+\}', row.get('argins', ''))]
+        matches = [i for i, values in enumerate(configurations) if values == params]
+        if len(matches) != 1:
+            return
+        index = matches[0]
+
+    expected = {}
+    try:
+        for attribute, column in columns:
+            value = row[column] if index is None else row[column + 's'].split()[index]
+            count = float(value)
+            if not np.isfinite(count) or count < 0 or not count.is_integer():
+                return
+            expected[attribute] = int(count)
+    except (KeyError, ValueError, IndexError):
+        return
+    mismatches = [f'expected {column}={expected[attribute]}, '
+                  f'loaded {column}={getattr(problem, attribute)}'
+                  for attribute, column in columns
+                  if getattr(problem, attribute) != expected[attribute]]
+    if mismatches:
+        raise RuntimeError(
+            f"PyCUTEst instance metadata mismatch for '{problem_name}' "
+            f'(SIF parameters: {params}): ' + '; '.join(mismatches)
+            + '. Use the runtime matching the frozen selection metadata. '
+              'The adapter did not substitute another problem instance.'
+        )
+
 
 def pycutest_load(problem_name, **kwargs):
     """
@@ -206,6 +254,7 @@ def pycutest_load(problem_name, **kwargs):
 
     problem = Problem(fun, x0, name=problem_name, xl=xl, xu=xu, aub=aub, bub=bub, aeq=aeq, beq=beq, cub=cub, ceq=ceq, grad=grad, hess=hess, jcub=jcub, jceq=jceq, hcub=hcub, hceq=hceq)
 
+    _assert_loaded_instance(problem_name, kwargs, problem)
     return problem
 
 def pycutest_select(options):

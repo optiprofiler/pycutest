@@ -4,6 +4,30 @@ This repository provides an interface for OptiProfiler to access the [PyCUTEst](
 
 It contains adaptation tools allowing OptiProfiler to invoke and work with these problems.
 
+## Paper instance consistency
+
+This backport retains the interface, selector, configuration and CSV from
+`44906dd8a5ccdf9eb47c9e315fac834f1cfc1c85`. After loading, it checks the dimension
+and bound/linear/nonlinear/total constraint counts against an unambiguous
+record in that original CSV. Bare names use the default record; explicitly
+parameterized names use an exactly matching `argins` record. Unrecorded custom
+parameters are passed to PyCUTEst as before, including its own error handling.
+Encoded parameters retain the paper API's precedence over keyword parameters.
+
+A mismatch raises `RuntimeError` rather than silently benchmarking an instance
+outside the requested range. No default-parameter table is added, no SIF
+parameter is injected, and no problem is replaced or removed from selection.
+For example, the frozen CSV describes default `OSCIPATH` as dimension 10.
+MASTSIF v0.5 (`04280876fc4c7cae9a06ab34e0d5887bee4d8960`) loads dimension 10;
+the separately tested MASTSIF snapshot `29adac9f1618cd23b67f16fe80910e7c030a657a`
+loads dimension 500 and is rejected. The test environment's exact runtime
+versions must accompany an experiment; the adapter does not install runtimes.
+
+The regression test `tests/test_instance_invariant.py` covers the frozen
+runtime, explicit/encoded parameters, legacy precedence, unrecorded parameters,
+and count mismatches. Set `OP_TEST_DRIFT_RUNTIME=1` only when explicitly testing
+the dimension-500 runtime above in a separate process and fresh cache.
+
 ## Contents
 
 - **Adaptation Tools**: Wrapper scripts and utilities in the root directory that bridge OptiProfiler with the PyCUTEst collection.
