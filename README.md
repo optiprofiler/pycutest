@@ -150,6 +150,13 @@ not present in the reviewed metadata do not claim a recorded shape.
 
 ## Testing
 
+Loading fails closed when native constraint bounds have invalid shapes or NaN
+entries, or when required linear constraint values/Jacobians cannot be read.
+The adapter does not replace failed linear constraints with empty matrices.
+Purely nonlinear problems do not need a Jacobian probe during loading.
+The regression suite includes injected failures through the actual loader,
+real CUTEst U/B/L/N controls, and linear offset/sign checks.
+
 The `CI` workflow runs daily and on pushes on Linux. It installs CUTEst/PyCUTEst, checks the OptiProfiler adapter layer, and keeps the sample intentionally small:
 
 - load `ROSENBR` through `pycutest_load` and evaluate `fun`, `cub`, and `ceq`;
@@ -162,7 +169,8 @@ The `CI` workflow runs daily and on pushes on Linux. It installs CUTEst/PyCUTEst
 - check the installed entry-point factory without importing PyCUTEst;
 - sample a few additional small problems each day with at most two numerical-library threads.
 
-If PyCUTEst is not installed locally, the Python tests are skipped. From this repository:
+Runtime-dependent tests need an installed PyCUTEst/CUTEst environment; mocked
+adapter conversion tests do not. From this repository:
 
 ```bash
 python -m unittest discover -s tests -p 'test_*.py'
