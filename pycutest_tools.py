@@ -91,6 +91,12 @@ def pycutest_load(problem_name, **kwargs):
 
     Notes
     -----
+    Invalid native constraint-bound shapes or NaN entries raise
+    `ValueError` before constraint conversion. If required linear
+    constraint values or Jacobians cannot be read, loading raises
+    `RuntimeError` with the original cause instead of dropping constraints.
+    Purely nonlinear problems do not require a Jacobian probe at load time.
+
     The problem name may include SIF parameters in the format
     ``'PROBLEMNAME_paramname_paramvalue'`` (e.g., ``'ARGLINA_N_100'``).
     In this case, the function will parse the parameters and pass them
@@ -134,6 +140,13 @@ def pycutest_load(problem_name, **kwargs):
 
     cl = np.asarray(p.cl) if p.m > 0 else np.array([], dtype=float)
     cu = np.asarray(p.cu) if p.m > 0 else np.array([], dtype=float)
+    # NaN compares false against either infinity and would silently lose a bound.
+    if (cl.shape != (p.m,) or cu.shape != (p.m,)
+            or np.any(np.isnan(cl)) or np.any(np.isnan(cu))):
+        raise ValueError(
+            f"Invalid constraint bounds for PyCUTEst problem '{problem_name}': "
+            "cl and cu must have one non-NaN entry per native constraint."
+        )
     mask_cl_finite = (cl > -np.inf) if p.m > 0 else np.array([], dtype=bool)
     mask_cu_finite = (cu < np.inf) if p.m > 0 else np.array([], dtype=bool)
 
@@ -152,16 +165,29 @@ def pycutest_load(problem_name, **kwargs):
     mask_nonlinear_le = mask_nonlinear_ineq & mask_cu_finite
     mask_nonlinear_ge = mask_nonlinear_ineq & mask_cl_finite
 
-    # The linear constraints are hidden in the cJx method output.
-    # cx = jx @ x0 - bx
-    buf = io.StringIO()
-    with redirect_stdout(buf):
+    # Extract c(x) = J x - b only when a linear constraint needs conversion.
+    # A failed probe must not silently produce a less constrained problem.
+    required_linear = mask_linear_eq | mask_linear_le | mask_linear_ge
+    jx = bx = None
+    if np.any(required_linear):
         try:
-            cx, jx = p.cons(x0, gradient=True)
-            bx = jx @ x0 - cx
-        except Exception:
-            jx = None
-            bx = None
+            with redirect_stdout(io.StringIO()):
+                cx, jx = p.cons(x0, gradient=True)
+            cx, jx = np.asarray(cx), np.asarray(jx)
+            if cx.shape != (p.m,) or jx.shape != (p.m, p.n):
+                raise ValueError("Unexpected native constraint/Jacobian shape.")
+            if (not np.all(np.isfinite(cx[required_linear]))
+                    or not np.all(np.isfinite(jx[required_linear]))):
+                raise ValueError("Non-finite linear constraint/Jacobian values.")
+            bx = np.zeros(p.m)
+            bx[required_linear] = jx[required_linear] @ x0 - cx[required_linear]
+            if not np.all(np.isfinite(bx[required_linear])):
+                raise ValueError("Non-finite linear constraint offsets.")
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load linear constraints for PyCUTEst problem "
+                f"'{problem_name}'."
+            ) from exc
 
     # Create the linear constraints if any.
     # Note that in PyCUTEst, the constraints are defined as:
@@ -173,12 +199,12 @@ def pycutest_load(problem_name, **kwargs):
     #  -jx[mask_linear_ge, :] @ x <= -bx[mask_linear_ge] - cl[mask_linear_ge]
     aeq = jx[mask_linear_eq, :] if np.any(mask_linear_eq) else np.zeros((0, p.n))
     beq = bx[mask_linear_eq] + cu[mask_linear_eq] if np.any(mask_linear_eq) else np.zeros(0)
-    aub = np.vstack([jx[mask_linear_le, :], -jx[mask_linear_ge, :]]) if jx is not None and (np.any(mask_linear_le) or np.any(mask_linear_ge)) else np.zeros((0, p.n))
-    bub = np.concatenate([bx[mask_linear_le] + cu[mask_linear_le], -bx[mask_linear_ge] - cl[mask_linear_ge]]) if bx is not None and (np.any(mask_linear_le) or np.any(mask_linear_ge)) else np.zeros(0)
+    aub = np.vstack([jx[mask_linear_le, :], -jx[mask_linear_ge, :]]) if (np.any(mask_linear_le) or np.any(mask_linear_ge)) else np.zeros((0, p.n))
+    bub = np.concatenate([bx[mask_linear_le] + cu[mask_linear_le], -bx[mask_linear_ge] - cl[mask_linear_ge]]) if (np.any(mask_linear_le) or np.any(mask_linear_ge)) else np.zeros(0)
 
     # Handle nonlinear constraints.
     # Construct nonlinear constraint functions
-    # Remind that in S2MPJ, the constraints are defined as:
+    # In PyCUTEst, the constraints are defined as:
     #  cl <= c(x) <= cu
     # Thus, the nonlinear equality constraints are:
     #  ceq(x) = c(x)[mask_nonlinear_eq] - cu[mask_nonlinear_eq] = 0

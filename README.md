@@ -52,6 +52,13 @@ You can also set the environment variables `PYCUTEST_VARIABLE_SIZE` and `PYCUTES
 
 ## Testing
 
+Loading rejects malformed or NaN native constraint bounds before conversion.
+Failure to read required linear constraints raises a contextual error with
+the original cause, rather than returning an incompletely constrained problem.
+Purely nonlinear loading does not need a Jacobian probe. Tests cover injected
+failures, real CUTEst U/B/L/N controls and nonzero linear offsets/signs.
+These changes retain the paper SIF parameter selection and metadata.
+
 The `CI` workflow runs daily and on pushes on Linux. It installs CUTEst/PyCUTEst, checks the OptiProfiler adapter layer, and keeps the sample intentionally small:
 
 - load `ROSENBR` through `pycutest_load` and evaluate `fun`, `cub`, and `ceq`;
