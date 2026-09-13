@@ -1,6 +1,6 @@
 import ast, csv, json, sys, os, io, re, importlib, shutil
 from collections.abc import Mapping
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from functools import lru_cache
 from pathlib import Path
 import numpy as np
@@ -195,6 +195,22 @@ def _configure_pycutest_cache():
     return cache_dir
 
 
+@contextmanager
+def _pycutest_cache_lock(cache_root):
+    """Serialize cache construction/clearing, never problem evaluation."""
+    import fcntl
+
+    root = os.path.realpath(cache_root)
+    os.makedirs(root, exist_ok=True)
+    # Keep this inode outside the holder: removing it can split waiting locks.
+    with open(os.path.join(root, '.optiprofiler-import.lock'), 'a+b') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        try:
+            yield root
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
+
+
 def pycutest_check_available():
     """Raise an informative exception when PyCUTEst/CUTEst is unavailable."""
     try:
@@ -287,12 +303,13 @@ def pycutest_load(problem_name, library_options=None, **kwargs):
 
     pycutest = _get_pycutest()
 
-    # Initialize CUTEst problem
-    p = pycutest.import_problem(
-        problem_name,
-        destination=problem_name,
-        sifParams=params or None,
-    )
+    # A cache directory can exist before its native module is ready to import.
+    with _pycutest_cache_lock(pycutest.system_paths.get_cache_path()):
+        p = pycutest.import_problem(
+            problem_name,
+            destination=problem_name,
+            sifParams=params or None,
+        )
 
     fun = lambda x: p.obj(x)
     grad = lambda x: p.grad(x)
@@ -939,14 +956,18 @@ def pycutest_get_sif_params(problem_name):
 def pycutest_clear_cache(problem_name, **kwargs):
     pycutest = _get_pycutest()
     problem_name, params, _ = _resolve_problem_instance(problem_name, kwargs)
-    pycutest.clear_cache(problem_name, sifParams=params or None)
+    with _pycutest_cache_lock(pycutest.system_paths.get_cache_path()):
+        pycutest.clear_cache(problem_name, sifParams=params or None)
 
 def pycutest_clear_all_cache():
-    # Delete the folder 'pycutest_cache_holder' directly.
-    cache_dir = _configure_pycutest_cache()
-    cache_holder_path = os.path.join(cache_dir, 'pycutest_cache_holder')
-    if os.path.exists(cache_holder_path):
-        shutil.rmtree(cache_holder_path)
+    # Clearing remains usable without importing an unavailable optional runtime.
+    runtime = _PYCUTEST_MODULE or sys.modules.get('pycutest')
+    cache_root = (runtime.system_paths.get_cache_path() if runtime is not None
+                  else _configure_pycutest_cache())
+    with _pycutest_cache_lock(cache_root) as root:
+        cache_holder_path = os.path.join(root, 'pycutest_cache_holder')
+        if os.path.exists(cache_holder_path):
+            shutil.rmtree(cache_holder_path)
 
 def _parse_problem_name(problem_name):
     # Check if 'problem_name' has the pattern '_{paramname}_{paramvalue}'. If it has, we separate the problem name and its sif parameters (and their values).

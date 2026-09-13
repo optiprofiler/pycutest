@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from types import SimpleNamespace
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -42,13 +43,16 @@ class NativeFixture:
 
 @contextmanager
 def native_input(problem):
-    runtime = SimpleNamespace(import_problem=lambda *args, **kwargs: problem)
-    if hasattr(adapter, '_get_pycutest'):
-        with patch.object(adapter, '_get_pycutest', return_value=runtime):
-            yield
-    else:
-        with patch.object(adapter, 'pycutest', runtime):
-            yield
+    with tempfile.TemporaryDirectory() as root:
+        runtime = SimpleNamespace(
+            import_problem=lambda *args, **kwargs: problem,
+            system_paths=SimpleNamespace(get_cache_path=lambda: root))
+        if hasattr(adapter, '_get_pycutest'):
+            with patch.object(adapter, '_get_pycutest', return_value=runtime):
+                yield
+        else:
+            with patch.object(adapter, 'pycutest', runtime):
+                yield
 
 
 class ConstraintLoadingTests(unittest.TestCase):

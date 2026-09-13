@@ -89,6 +89,26 @@ described above.
 
 ## Configuration
 
+### Parallel cache access
+
+On Linux/macOS the adapter serializes each complete upstream
+`pycutest.import_problem` call and both adapter cache-clear operations with
+a process lock in the effective cache root. This prevents workers from
+creating the same cache directory or importing an incompletely built module.
+The lock ends before problem conversion and solver/objective evaluation;
+benchmark evaluations remain parallel. Warm imports use the same lock.
+
+The persistent `.optiprofiler-import.lock` file lives outside
+`pycutest_cache_holder` and is not removed when clearing that holder. Its
+presence does not mean a process holds the lock. Keep the cache environment
+and working directory stable while loading, and use a filesystem that
+supports POSIX advisory locks. The existing cache policy is unchanged:
+`PYCUTEST_CACHE` takes precedence, otherwise the user cache is used.
+External callers bypassing this adapter do not participate in its lock.
+Do not clear a cache while previously loaded native problems are in use.
+Permission, path, and native build errors still propagate; the adapter does
+not retry, repair partial entries, or modify upstream PyCUTEst source.
+
 The file `config.txt` in this directory controls how `pycutest_select` filters problems (e.g., `variable_size` and `test_feasibility_problems`). See the comments in `config.txt` for a full description of each option.
 
 For a reproducible OptiProfiler experiment, pass the options explicitly for
