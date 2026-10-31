@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from importlib import metadata
 import multiprocessing
+import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -40,6 +42,13 @@ class PyCUTEstPluginProtocolTests(unittest.TestCase):
             values.get("pycutest"),
             "optiprofiler_pycutest:get_problem_library",
         )
+
+    def test_import_does_not_change_builtins(self):
+        code = (
+            "import builtins, optiprofiler_pycutest\n"
+            "assert not hasattr(builtins, 'np')\n"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)
 
     def test_distribution_does_not_offer_runtime_installation_extra(self):
         distribution = metadata.distribution("optiprofiler-pycutest")

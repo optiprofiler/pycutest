@@ -6,9 +6,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import builtins
-builtins.np = np  # Make numpy available globally as 'np'
-
 _PYCUTEST_MODULE = None
 _PYCUTEST_CACHE_DIR = None
 
