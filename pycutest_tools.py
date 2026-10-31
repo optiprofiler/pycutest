@@ -283,7 +283,7 @@ def pycutest_load(problem_name, library_options=None, **kwargs):
     --------
     .. code-block:: python
 
-        from optiprofiler.problem_libs.pycutest import pycutest_load
+        from optiprofiler_pycutest import pycutest_load
 
         problem = pycutest_load('ROSENBR')
         print(problem.n)  # 2
@@ -638,7 +638,7 @@ def pycutest_select(options, library_options=None):
     --------
     .. code-block:: python
 
-        from optiprofiler.problem_libs.pycutest import pycutest_select
+        from optiprofiler_pycutest import pycutest_select
 
         names = pycutest_select({'ptype': 'u', 'maxdim': 5})
     """
@@ -824,7 +824,17 @@ def pycutest_select(options, library_options=None):
                         problem_names.append(problem_name)
                         continue
             
-            # For 'all' we just process all idxs
+            elif default_satisfy:
+                # 'all' returns every satisfying instance. The default one is
+                # usually not among the listed configurations; when it is, the
+                # loop below selects it under its encoded name, so never add
+                # the same instance twice.
+                defaults = _load_reviewed_sif_defaults()['problems'].get(problem_name)
+                if defaults is None or not any(
+                    _same_parameters(defaults, configuration)
+                    for configuration in _parse_parameter_configurations(argins_str)
+                ):
+                    problem_names.append(problem_name)
             
             # Add problems with specific dimensions/constraints
             for idx in idxs:

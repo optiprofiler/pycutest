@@ -11,10 +11,49 @@ from pycutest_tools import (
     _load_reviewed_sif_defaults,
     _parse_parameter_configurations,
     _resolve_problem_instance,
+    pycutest_select,
 )
 
 
 REPO_DIR = Path(__file__).resolve().parents[1]
+
+
+def _selected(mode, **criteria):
+    options = {"ptype": "ubln", "maxb": float("inf"), "maxlcon": float("inf"),
+               "maxnlcon": float("inf"), "maxcon": float("inf")}
+    options.update(criteria)
+    return pycutest_select(
+        options, {"variable_size": mode, "test_feasibility_problems": 0},
+    )
+
+
+class VariableSizeAllTests(unittest.TestCase):
+    def test_default_instance_is_part_of_all(self):
+        default = _selected("default", maxdim=300)
+        everything = _selected("all", maxdim=300)
+        self.assertEqual(sorted(set(default) - set(everything)), [])
+        self.assertIn("ARGLINA", everything)
+        self.assertIn("ARGLINA_N_10_M_20", everything)
+
+    def test_criteria_still_apply_to_the_default_instance(self):
+        names = _selected("all", mindim=201, maxdim=5000)
+        self.assertNotIn("ARGLINA", names)
+
+    def test_default_listed_as_a_configuration_is_not_selected_twice(self):
+        # The default N=10000 is also the configuration SCURLY10_N_10000.
+        names = _selected("all", maxdim=20000, ptype="u")
+        self.assertIn("SCURLY10_N_10000", names)
+        self.assertNotIn("SCURLY10", names)
+
+    def test_every_selected_name_is_a_distinct_instance(self):
+        instances = [
+            (base, tuple(sorted(params.items())))
+            for base, params, _ in map(
+                lambda name: _resolve_problem_instance(name, {}),
+                _selected("all", maxdim=float("inf")),
+            )
+        ]
+        self.assertEqual(len(instances), len(set(instances)))
 
 
 class VariableMetadataTests(unittest.TestCase):
