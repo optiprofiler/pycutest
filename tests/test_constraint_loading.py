@@ -46,9 +46,12 @@ def native_input(problem):
     with tempfile.TemporaryDirectory() as root:
         runtime = SimpleNamespace(
             import_problem=lambda *args, **kwargs: problem,
+            build_interface=SimpleNamespace(get_problem_directory=lambda *args, **kwargs: root + '/absent'),
             system_paths=SimpleNamespace(get_cache_path=lambda: root))
         if hasattr(adapter, '_get_pycutest'):
-            with patch.object(adapter, '_get_pycutest', return_value=runtime):
+            # The substitute cache is not the holder that real tests imported.
+            with patch.object(adapter, '_get_pycutest', return_value=runtime), \
+                    patch.object(adapter, '_assert_cache_holder'):
                 yield
         else:
             with patch.object(adapter, 'pycutest', runtime):

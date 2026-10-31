@@ -131,6 +131,22 @@ def _resolve_problem_instance(problem_name, explicit_params):
     return base_name, params, _expected_instance_metadata(base_name, params)
 
 
+def _runtime_sif_params(base_name, params):
+    """Return the parameters to pass to PyCUTEst for one resolved instance.
+
+    PyCUTEst imports a cache entry as a module named after its parameters, so a
+    fractional value (INDEF has ALPHA=0.5) gives a name that cannot be imported.
+    Without parameters SIFDECODE builds the same reviewed default instance, and
+    its size is still checked against the metadata after loading.
+    """
+    defaults = _load_reviewed_sif_defaults()['problems'].get(base_name)
+    if defaults is not None and _same_parameters(defaults, params) and any(
+        float(value) != int(value) for value in defaults.values()
+    ):
+        return None
+    return params or None
+
+
 def _assert_loaded_instance(problem_name, problem, expected):
     """Fail loudly when an installed CUTEst runtime drifts from selected metadata."""
     if expected is None:
@@ -186,8 +202,11 @@ def _configure_pycutest_cache():
 
     cache_path.mkdir(parents=True, exist_ok=True)
     cache_dir = str(cache_path.resolve())
-    if cache_dir not in sys.path:
-        sys.path.append(cache_dir)
+    # First on the path: the holder package of another cache, for example in the
+    # script directory, must not answer for this one.
+    if cache_dir in sys.path:
+        sys.path.remove(cache_dir)
+    sys.path.insert(0, cache_dir)
     _PYCUTEST_CACHE_DIR = cache_dir
     return cache_dir
 
@@ -206,6 +225,32 @@ def _pycutest_cache_lock(cache_root):
             yield root
         finally:
             fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def _discard_partial_cache_entry(pycutest, problem_name, sif_params):
+    """Clear an entry left by a killed build; call this under the cache lock.
+
+    Upstream treats any existing directory as cached and writes ``__init__.py``
+    last, so without this an interrupted build would fail on every later import.
+    The lock excludes a build in progress.
+    """
+    directory = pycutest.build_interface.get_problem_directory(problem_name, sifParams=sif_params)
+    if os.path.isdir(directory) and not os.path.isfile(os.path.join(directory, '__init__.py')):
+        pycutest.clear_cache(problem_name, sifParams=sif_params)
+
+
+def _assert_cache_holder(cache_root):
+    """Refuse a holder package of another cache already imported in this process."""
+    location = getattr(sys.modules.get('pycutest_cache_holder'), '__file__', None)
+    if location is None:
+        return
+    root = os.path.dirname(os.path.dirname(os.path.realpath(location)))
+    if root != os.path.realpath(cache_root):
+        raise ImportError(
+            f'The PyCUTEst cache holder was imported from {root}, not from the '
+            f'effective cache {os.path.realpath(cache_root)}. Keep one cache per '
+            'process: set PYCUTEST_CACHE before importing PyCUTEst.'
+        )
 
 
 def pycutest_check_available():
@@ -264,7 +309,8 @@ def pycutest_load(problem_name, library_options=None, **kwargs):
 
     Notes
     -----
-    Invalid native constraint-bound shapes or NaN entries raise
+    An existing cache entry that a killed build left incomplete is cleared and
+    rebuilt. Invalid native constraint-bound shapes or NaN entries raise
     `ValueError` before constraint conversion. If required linear
     constraint values or Jacobians cannot be read, loading raises
     `RuntimeError` with the original cause instead of dropping constraints.
@@ -301,12 +347,18 @@ def pycutest_load(problem_name, library_options=None, **kwargs):
     pycutest = _get_pycutest()
 
     # A cache directory can exist before its native module is ready to import.
-    with _pycutest_cache_lock(pycutest.system_paths.get_cache_path()):
+    sif_params = _runtime_sif_params(problem_name, params)
+    cache_root = pycutest.system_paths.get_cache_path()
+    with _pycutest_cache_lock(cache_root):
+        _discard_partial_cache_entry(pycutest, problem_name, sif_params)
+        # Another process may have created this entry after the last directory scan.
+        importlib.invalidate_caches()
         p = pycutest.import_problem(
             problem_name,
             destination=problem_name,
-            sifParams=params or None,
+            sifParams=sif_params,
         )
+        _assert_cache_holder(cache_root)
 
     fun = lambda x: p.obj(x)
     grad = lambda x: p.grad(x)
@@ -964,13 +1016,15 @@ def pycutest_clear_cache(problem_name, **kwargs):
     pycutest = _get_pycutest()
     problem_name, params, _ = _resolve_problem_instance(problem_name, kwargs)
     with _pycutest_cache_lock(pycutest.system_paths.get_cache_path()):
-        pycutest.clear_cache(problem_name, sifParams=params or None)
+        pycutest.clear_cache(problem_name, sifParams=_runtime_sif_params(problem_name, params))
 
 def pycutest_clear_all_cache():
     # Clearing remains usable without importing an unavailable optional runtime.
+    # Configure first: PyCUTEst imported elsewhere defaults to the current folder,
+    # and a cache found there is not this adapter's to delete.
+    configured = _configure_pycutest_cache()
     runtime = _PYCUTEST_MODULE or sys.modules.get('pycutest')
-    cache_root = (runtime.system_paths.get_cache_path() if runtime is not None
-                  else _configure_pycutest_cache())
+    cache_root = runtime.system_paths.get_cache_path() if runtime is not None else configured
     with _pycutest_cache_lock(cache_root) as root:
         cache_holder_path = os.path.join(root, 'pycutest_cache_holder')
         if os.path.exists(cache_holder_path):

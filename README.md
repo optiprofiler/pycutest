@@ -44,6 +44,8 @@ marks the commit tested with OptiProfiler 2.0.0. Until OptiProfiler 2.0.0 is on
 PyPI, install that core first from its own wheel or checkout, because pip cannot
 otherwise satisfy `optiprofiler>=2.0.0`. Do not work around this with
 `--no-deps`: it skips the compatibility check that the requirement expresses.
+pip keeps an installed adapter of the same version, so uninstall an earlier
+source build before installing another commit.
 
 This distribution intentionally installs only the OptiProfiler adapter. It does
 not install or configure PyCUTEst, CUTEst, or MASTSIF. Users who want to run
@@ -76,8 +78,7 @@ assert "pycutest" in list_problem_libraries()
 Select the adapter with `benchmark(..., plibs=["pycutest"])`; an installed
 plugin needs no filesystem path.
 
-For an unpublished development checkout, update the compatible feature branch
-and reinstall the adapter explicitly:
+For a source checkout, update it and reinstall the adapter explicitly:
 
 ```bash
 git pull --ff-only
@@ -102,20 +103,41 @@ described above.
 On Linux/macOS the adapter serializes each complete upstream
 `pycutest.import_problem` call and both adapter cache-clear operations with
 a process lock in the effective cache root. This prevents workers from
-creating the same cache directory or importing an incompletely built module.
+creating the same cache directory or importing a module that is still being
+built. An entry left incomplete by a killed build has no `__init__.py`, which
+upstream writes last; the next load clears and rebuilds it under the lock.
 The lock ends before problem conversion and solver/objective evaluation;
-benchmark evaluations remain parallel. Warm imports use the same lock.
+benchmark evaluations remain parallel. Warm imports use the same lock, so the
+cache root must be writable.
 
 The persistent `.optiprofiler-import.lock` file lives outside
 `pycutest_cache_holder` and is not removed when clearing that holder. Its
 presence does not mean a process holds the lock. Keep the cache environment
 and working directory stable while loading, and use a filesystem that
 supports POSIX advisory locks. The existing cache policy is unchanged:
-`PYCUTEST_CACHE` takes precedence, otherwise the user cache is used.
-External callers bypassing this adapter do not participate in its lock.
+`PYCUTEST_CACHE` takes precedence, otherwise the user cache is used. The adapter
+puts that root first on `sys.path` and refuses a `pycutest_cache_holder` package
+already imported from another cache, so set `PYCUTEST_CACHE` before importing
+PyCUTEst. External callers bypassing this adapter do not participate in its lock.
 Do not clear a cache while previously loaded native problems are in use.
 Permission, path, and native build errors still propagate; the adapter does
 not retry, repair partial entries, or modify upstream PyCUTEst source.
+
+### Undefined `_ZGV...` symbols
+
+Recent gfortran releases vectorize math calls at `-O2` through glibc's `libmvec`,
+and upstream PyCUTEst does not link that library. On such a toolchain (observed
+with gfortran 15 and glibc 2.43), about 2% of the problems then fail to import
+with an undefined symbol such as `_ZGVbN2vv_pow`, and OptiProfiler reports them
+as load failures. Preloading the library fixes them without a rebuild:
+
+```bash
+LD_PRELOAD=libmvec.so.1 python your_benchmark.py
+```
+
+The adapter does not preload libraries or change upstream build flags for you.
+
+### Selection
 
 The file `config.txt` in this directory controls how `pycutest_select` filters problems (e.g., `variable_size` and `test_feasibility_problems`). See the comments in `config.txt` for a full description of each option.
 

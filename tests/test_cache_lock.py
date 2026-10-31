@@ -8,6 +8,7 @@ import fcntl
 import multiprocessing as mp
 import os
 from pathlib import Path
+import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -35,6 +36,8 @@ def lock_is_free(root):
 def runtime(root, import_call=None, clear_call=None):
     substitute = SimpleNamespace(
         system_paths=SimpleNamespace(get_cache_path=lambda: str(root)),
+        build_interface=SimpleNamespace(get_problem_directory=lambda name, sifParams=None:
+                                        str(Path(root) / 'pycutest_cache_holder' / name)),
         import_problem=import_call, clear_cache=clear_call)
     if hasattr(adapter, '_get_pycutest'):
         with patch.object(adapter, '_get_pycutest', return_value=substitute), \
@@ -200,6 +203,85 @@ class CacheLockTests(unittest.TestCase):
         with runtime(self.root, import_call=import_call), patch.object(adapter, 'Problem', converted):
             with self.assertRaisesRegex(RuntimeError, 'reached conversion without lock'):
                 adapter.pycutest_load('CACHELOCKPROBE')
+
+    def test_entry_of_a_killed_build_is_cleared_under_the_lock(self):
+        entry = self.root / 'pycutest_cache_holder' / 'CACHELOCKPROBE'
+        entry.mkdir(parents=True)
+        cleared = []
+
+        def clear_call(name, sifParams=None):
+            self.assertFalse(lock_is_free(self.root))
+            cleared.append(name)
+
+        def import_call(*args, **kwargs):
+            self.assertEqual(cleared, ['CACHELOCKPROBE'])
+            raise RuntimeError('stop before conversion')
+
+        with runtime(self.root, import_call=import_call, clear_call=clear_call):
+            with self.assertRaisesRegex(RuntimeError, 'stop before conversion'):
+                adapter.pycutest_load('CACHELOCKPROBE')
+
+    def test_complete_entry_is_not_cleared(self):
+        entry = self.root / 'pycutest_cache_holder' / 'CACHELOCKPROBE'
+        entry.mkdir(parents=True)
+        (entry / '__init__.py').touch()
+
+        def clear_call(*args, **kwargs):
+            self.fail('A complete entry was cleared.')
+
+        def import_call(*args, **kwargs):
+            raise RuntimeError('stop before conversion')
+
+        with runtime(self.root, import_call=import_call, clear_call=clear_call):
+            with self.assertRaisesRegex(RuntimeError, 'stop before conversion'):
+                adapter.pycutest_load('CACHELOCKPROBE')
+
+    def test_clear_all_never_touches_the_cache_of_the_working_directory(self):
+        # PyCUTEst imported elsewhere defaults to the current folder.
+        working, home = self.root / 'working', self.root / 'home'
+        kept = working / 'pycutest_cache_holder'
+        kept.mkdir(parents=True)
+        own = home / 'optiprofiler' / 'pycutest' / 'pycutest_cache_holder'
+        own.mkdir(parents=True)
+        upstream = SimpleNamespace(system_paths=SimpleNamespace(
+            get_cache_path=lambda: os.environ.get('PYCUTEST_CACHE', str(working))))
+        environment = {key: value for key, value in os.environ.items() if key != 'PYCUTEST_CACHE'}
+        environment['XDG_CACHE_HOME'] = str(home)
+        with patch.dict(os.environ, environment, clear=True), \
+                patch.dict(sys.modules, {'pycutest': upstream}), \
+                patch.object(adapter, '_PYCUTEST_MODULE', None), \
+                patch.object(adapter, '_PYCUTEST_CACHE_DIR', None):
+            adapter.pycutest_clear_all_cache()
+        self.assertTrue(kept.exists())
+        self.assertFalse(own.exists())
+
+    def test_cache_root_comes_first_on_the_path(self):
+        cache = self.root / 'cache'
+        path = [str(cache), 'somewhere']
+        with patch.dict(os.environ, {'PYCUTEST_CACHE': str(cache)}), \
+                patch.object(sys, 'path', path), \
+                patch.object(adapter, '_PYCUTEST_CACHE_DIR', None):
+            root = adapter._configure_pycutest_cache()
+        self.assertEqual(path[0], root)
+        self.assertEqual(path.count(root), 1)
+
+    def test_holder_of_another_cache_is_refused(self):
+        holder = self.root / 'other' / 'pycutest_cache_holder'
+        holder.mkdir(parents=True)
+        module = SimpleNamespace(__file__=str(holder / '__init__.py'))
+        with patch.dict(sys.modules, {'pycutest_cache_holder': module}):
+            adapter._assert_cache_holder(self.root / 'other')
+            with self.assertRaisesRegex(ImportError, 'cache holder'):
+                adapter._assert_cache_holder(self.root)
+
+    def test_fractional_default_parameters_are_not_passed(self):
+        problems = adapter._load_reviewed_sif_defaults()['problems']
+        self.assertIsNone(adapter._runtime_sif_params('INDEF', dict(problems['INDEF'])))
+        self.assertEqual(adapter._runtime_sif_params('INDEF', {'N': 50, 'ALPHA': 0.5}),
+                         {'N': 50, 'ALPHA': 0.5})
+        self.assertEqual(adapter._runtime_sif_params('ARGLINA', dict(problems['ARGLINA'])),
+                         problems['ARGLINA'])
+        self.assertIsNone(adapter._runtime_sif_params('ROSENBR', {}))
 
     def test_clear_operations_wait_for_import_lock_and_keep_inode(self):
         for all_entries in (False, True):
