@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.17.0",
-    "optiprofiler>=1.4.0",
+    "optiprofiler>=2.0.0",
     "pandas>=1.1.0",
 ]
 version = "0.1.0"
@@ -50,6 +50,7 @@ include-package-data = false
 optiprofiler_pycutest = [
     "LICENSE",
     "README.md",
+    "V2_COMPATIBILITY.md",
     "THIRD_PARTY_NOTICES.md",
     "config.txt",
     "probinfo_pycutest.csv",

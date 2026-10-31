@@ -1,5 +1,7 @@
 # PyCUTEst
 
+**OptiProfiler 2.0:** See [compatibility and release boundaries](V2_COMPATIBILITY.md).
+
 This repository provides an interface for OptiProfiler to access the [PyCUTEst](https://github.com/jfowkes/pycutest) problem collection.
 
 It contains adaptation tools allowing OptiProfiler to invoke and work with these problems.
@@ -10,10 +12,9 @@ It contains adaptation tools allowing OptiProfiler to invoke and work with these
 
 ## Package and Plugin
 
-This package definition is a development build for the API-v1 protocol. The
-corresponding OptiProfiler release and this plugin distribution have not been
-published yet. Until that release exists, test from checkouts with `--no-deps`
-as shown below; the `0.1.0` package value is build metadata, not a release
+This adapter uses API-v1 and requires `optiprofiler>=2.0.0`. OptiProfiler
+2.0.0 is not on PyPI until it is released, and this plugin is not published on
+PyPI either. The `0.1.0` package value is build metadata, not a release
 announcement.
 
 The Python distribution name is `optiprofiler-pycutest`. It installs the
@@ -30,12 +31,19 @@ the upstream PyCUTEst runtime module. Installing or discovering this plugin does
 not import PyCUTEst or compile CUTEst problems. Runtime availability is checked
 only when OptiProfiler actually selects the `pycutest` problem library.
 
-For local development against a checked-out OptiProfiler core:
+Install the adapter at the exact commit recorded in the core's
+`problem_libraries.lock`, using normal dependency resolution:
 
 ```bash
-python -m pip install -e /path/to/optiprofiler
-python -m pip install -e . --no-deps --no-build-isolation
+python -m pip install "optiprofiler-pycutest @ git+https://github.com/optiprofiler/pycutest@<sha>"
+python -m pip check
 ```
+
+Replace `<sha>` with the full commit from the lock. The tag `optiprofiler-2.0.0`
+marks the commit tested with OptiProfiler 2.0.0. Until OptiProfiler 2.0.0 is on
+PyPI, install that core first from its own wheel or checkout, because pip cannot
+otherwise satisfy `optiprofiler>=2.0.0`. Do not work around this with
+`--no-deps`: it skips the compatibility check that the requirement expresses.
 
 This distribution intentionally installs only the OptiProfiler adapter. It does
 not install or configure PyCUTEst, CUTEst, or MASTSIF. Users who want to run
@@ -73,7 +81,7 @@ and reinstall the adapter explicitly:
 
 ```bash
 git pull --ff-only
-python -m pip install -e . --no-deps --no-build-isolation
+python -m pip install -e .
 ```
 
 The OptiProfiler core repository records the tested adapter commit in
