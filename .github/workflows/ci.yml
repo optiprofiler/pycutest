@@ -76,10 +76,15 @@ jobs:
         run: python scripts/check_distribution_licenses.py
 
       - name: Run adapter smoke and random tests
+        # About 2% of the problems need glibc's libmvec with recent gfortran (README).
+        env:
+          LD_PRELOAD: libmvec.so.1
         run: |
           python -m unittest discover -s tests -p 'test_*.py'
 
       - name: Fresh installed plugin smoke
+        env:
+          LD_PRELOAD: libmvec.so.1
         run: |
           wheel="$(python -c 'from pathlib import Path; print(next(Path("dist").glob("*.whl")).resolve())')"
           python -m pip uninstall -y optiprofiler-pycutest
